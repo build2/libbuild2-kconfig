@@ -1,0 +1,11 @@
+: 1
+name: libbuild2-kconfig-tests
+version: 0.1.0-a.0.z
+project: build2
+summary: Tests for the Kconfig build system module for build2
+license: GPL-2.0-only
+description-file: README.md
+url: https://github.com/build2/libbuild2-kconfig
+email: users@build2.org
+depends: * build2 >= 0.13.0
+depends: * bpkg >= 0.13.0

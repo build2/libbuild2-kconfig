@@ -1,0 +1,6 @@
+$out_root/
+{
+  include libbuild2/kconfig/
+}
+
+export $out_root/libbuild2/kconfig/$import.target

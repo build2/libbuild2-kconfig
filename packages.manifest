@@ -1,0 +1,4 @@
+: 1
+location: libbuild2-kconfig/
+:
+location: libbuild2-kconfig-tests/
