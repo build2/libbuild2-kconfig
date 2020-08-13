@@ -1,0 +1,5 @@
+project = basics
+
+using config
+using test
+using dist

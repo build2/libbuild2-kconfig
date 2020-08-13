@@ -1,0 +1,6 @@
+project = libbuild2-kconfig-examples
+
+using version
+using config
+using test
+using dist
