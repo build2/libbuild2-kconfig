@@ -1,5 +1,4 @@
 config.build
-config.kconfig
-config.kconfig.old
+config.kconfig*
 root/
 bootstrap/

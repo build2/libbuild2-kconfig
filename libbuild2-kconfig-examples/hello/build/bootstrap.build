@@ -1,5 +1,6 @@
 project = basics
 
 using config
+using kconfig
 using test
 using dist
