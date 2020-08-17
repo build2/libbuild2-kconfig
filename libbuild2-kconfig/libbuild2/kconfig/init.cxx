@@ -18,12 +18,127 @@ namespace build2
     static const path def_file ("Kconfig");
     static const path val_file ("config.kconfig");
 
+    static path
+    configure (scope& rs, const location& l, const path& df)
+    {
+      context& ctx (rs.ctx);
+
+      // We have a complication: we need to load the configuration here and
+      // now since anything after (remainder of root.build, buildfiles) can
+      // depend on its values. On the other hand, the overall configure meta-
+      // operation may fail (for various reasons, including because the
+      // configuration is incorrect as determined by what we load after) and
+      // in this case we don't want to have config.kconfig "saved", similar to
+      // config.build. Yet, on the third hand, we don't want to just discard
+      // the configuration since it may have required a lot of effort to
+      // create (and the failure may have nothing to do with it). So here we
+      // are going to save the configuration as config.kconfig.new and in the
+      // post-configure hook we will move it to config.kconfig. We will also
+      // check if there is config.kconfig.new laying around and use that as
+      // the starter configuration.
+      //
+      // Also a few notes on the configurator semantics: conf's --oldconfig
+      // and --oldaskconfig are quite similar in that they both load the
+      // existing configuration if present. The difference is that --oldconfig
+      // only asks for "new" values (for some definition of "new") while
+      // --oldaskconfig asks for all values using the existing configuration's
+      // values as the default answers.
+      //
+      // The other configurators (mconf, qconf) implement a hybrid of the two
+      // modes in that they also load the existing configuration if any and
+      // then present the configuration tree/menu with this configuration's
+      // values letting the user tweak what they deem necessary.
+      //
+      // @@ TODO: support customzing mode/method via config.kconfig?
+      //
+      // @@ COMP: will need to aggregate/disaggregate both files?
+
+      path vf (rs.out_path () / rs.root_extra->build_dir / val_file + ".new");
+
+      // If config.kconfig.new already exists, use that. Otherwise, if
+      // config.kconfig exists, rename it to config.kconfig.new.
+      //
+      // Note that in the former case we may also have the .new.old file which
+      // we should keep since configurators only create it if there are
+      // changes.
+      //
+      // What should the default configuration mode be? If the configuration
+      // doesn't exist, then --oldaskconfig. If the configuration does exists,
+      // then update it with --oldconfig. What if we have .new?  Initially we
+      // treated it as the existing case but if some buildfile flags it as
+      // invalid, then on reconfigure we don't get a chance to change anything
+      // (since from --oldconfig's point of view nothing has changed). So now
+      // we use --oldaskconfig for this case.
+      //
+      bool e (false);
+      if (!exists (vf))
+      {
+        path f (vf.base ());
+        if ((e = exists (f)))
+        {
+          mvfile (f, vf, 2);
+          rmfile (ctx, vf + ".old", 3); // For good measure.
+        }
+      }
+
+      //@@ Before importing and running the tool, we could check ourselves
+      //   whether existing config is good.
+      //
+      //   We could also fallback to built-in implementation (for some
+      //   basic modes) if unable to import.
+      //
+      pair<const exe*, import_kind> ir (
+        import_direct<exe> (
+          rs,
+          name ("kconfig-conf", dir_path (), "exe", "kconfig-conf"),
+          true      /* phase2 */,
+          false     /* optional */,
+          false     /* metadata */,
+          l,
+          "module load"));
+
+      //@@ If we were to support normal import, we would have to update the
+      //   target. Maybe one day.
+      //
+      if (ir.second != import_kind::adhoc)
+        fail (l) << "project import of kconfig-conf not supported" <<
+          info << "use config.kconfig_conf to specify executable path";
+
+      const process_path& pp (ir.first->process_path ());
+      cstrings args {pp.recall_string ()};
+
+      args.push_back ("-s");
+      args.push_back (e ? "--oldconfig" : "--oldaskconfig");
+      args.push_back (df.string ().c_str ());
+      args.push_back (nullptr);
+
+      strings vars;
+      vars.push_back ("KCONFIG_CONFIG=" + vf.string ()); // Keep it first.
+
+      process_env env (pp, vars);
+
+      if (verb >= 3)
+        print_process (env, args);
+      else if (verb >= 2)
+      {
+        diag_record dr (text);
+        dr << vars[0] << ' '; print_process (dr, args);
+      }
+      else if (verb)
+        text << "kconfig " << vf;
+
+      run (env, args);
+
+      return vf;
+    }
+
     static bool
     configure_post (action a, const scope& rs)
     {
       if (a.operation () == default_id)
       {
-        // Move config.kconfig.new to config.kconfig (see init() for details).
+        // Move config.kconfig.new to config.kconfig (see configure() above
+        // for details).
         //
         path vf (rs.out_path () / rs.root_extra->build_dir / val_file);
         path nf (vf + ".new");
@@ -48,12 +163,13 @@ namespace build2
     {
       if (a.operation () == default_id)
       {
-        // Move config.kconfig to config.kconfig.old (see init() for details).
+        // Move config.kconfig to config.kconfig.old (see configure() above
+        // for details).
         //
         path vf (rs.out_path () / rs.root_extra->build_dir / val_file);
 
-        // Similar logic to configure in init() below: if we have .new.old,
-        // use that (unfinished configure), otherwise, use .kconfig.
+        // Similar logic to configure(): if we have .new.old, use that
+        // (unfinished configure), otherwise, use .kconfig.
         //
         path f (vf + ".new");
         bool e (exists (f));
@@ -120,121 +236,15 @@ namespace build2
       context& ctx (rs.ctx);
 
       path df (rs.src_path () / rs.root_extra->build_dir / def_file);
-      path vf (rs.out_path () / rs.root_extra->build_dir / val_file);
 
       if (!exists (df))
         fail (l) << df << " does not exist";
 
       // (Re)configure if we are configuring.
       //
-      // We have a complication: we need to load the configuration here and
-      // now since anything after (remainder of root.build, buildfiles) can
-      // depend on its values. On the other hand, the overall configure meta-
-      // operation may fail (for various reasons, including because the
-      // configuration is incorrect as determined by what we load after) and
-      // in this case we don't want to have config.kconfig "saved", similar to
-      // config.build. Yet, on the third hand, we don't want to just discard
-      // the configuration since it may have required a lot of effort to
-      // create (and the failure may have nothing to do with it). So here we
-      // are going to save the configuration as config.kconfig.new and in the
-      // post-configure hook we will move it to config.kconfig. We will also
-      // check if there is config.kconfig.new laying around and use that as
-      // the starter configuration.
-      //
-      // Also a few notes on the configurator semantics: conf's --oldconfig
-      // and --oldaskconfig are quite similar in that they both load the
-      // existing configuration if present. The difference is that --oldconfig
-      // only asks for "new" values (for some definition of "new") while
-      // --oldaskconfig asks for all values using the existing configuration's
-      // values as the default answers.
-      //
-      // The other configurators (mconf, qconf) implement a hybrid of the two
-      // modes in that they also load the existing configuration if any and
-      // then present the configuration tree/menu with this configuration's
-      // values letting the user tweak what they deem necessary.
-      //
-      // @@ TODO: support customzing mode/method via config.kconfig?
-      //
-      // @@ COMP: will need to aggregate/disaggregate both files?
-      //
-      if (ctx.current_mif->id == configure_id)
-      {
-        vf += ".new";
-
-        // If config.kconfig.new already exists, use that. Otherwise, if
-        // config.kconfig exists, rename it to config.kconfig.new.
-        //
-        // Note that in the former case we may also have the .new.old file
-        // which we should keep since configurators only create it if there
-        // are changes.
-        //
-        // What should the default configuration mode be? If the configuration
-        // doesn't exist, then --oldaskconfig. If the configuration does
-        // exists, then update it with --oldconfig. What if we have .new?
-        // Initially we treated it as the existing case but if some buildfile
-        // flags it as invalid, then on reconfigure we don't get a chance to
-        // change anything (since from --oldconfig's point of view nothing has
-        // changed). So now we use --oldaskconfig for this case.
-        //
-        bool e (false);
-        if (!exists (vf))
-        {
-          path f (vf.base ());
-          if ((e = exists (f)))
-          {
-            mvfile (f, vf, 2);
-            rmfile (ctx, vf + ".old", 3); // For good measure.
-          }
-        }
-
-        //@@ Before importing and running the tool, we could check ourselves
-        //   whether existing config is good.
-        //
-        //   We could also fallback to built-in implementation (for some
-        //   basic modes) if unable to import.
-        //
-        pair<const exe*, import_kind> ir (
-          import_direct<exe> (
-            rs,
-            name ("kconfig-conf", dir_path (), "exe", "kconfig-conf"),
-            true      /* phase2 */,
-            false     /* optional */,
-            false     /* metadata */,
-            l,
-            "module load"));
-
-        //@@ If we were to support normal import, we would have to update the
-        //   target. Maybe one day.
-        //
-        if (ir.second != import_kind::adhoc)
-          fail (l) << "project import of kconfig-conf not supported" <<
-            info << "use config.kconfig_conf to specify executable path";
-
-        const process_path& pp (ir.first->process_path ());
-        cstrings args {pp.recall_string ()};
-
-        args.push_back ("-s");
-        args.push_back (e ? "--oldconfig" : "--oldaskconfig");
-        args.push_back (df.string ().c_str ());
-        args.push_back (nullptr);
-
-        strings vars;
-        vars.push_back ("KCONFIG_CONFIG=" + vf.string ()); // Keep it first.
-
-        process_env env (pp, vars);
-
-        if (verb >= 3)
-          print_process (env, args);
-        else if (verb >= 2)
-        {
-          diag_record dr (text);
-          dr << vars[0] << ' '; print_process (dr, args);
-        }
-        else if (verb)
-          text << "kconfig " << vf;
-
-        run (env, args);
-      }
+      path vf (ctx.current_mif->id == configure_id
+               ? configure (rs, l, df)
+               : rs.out_path () / rs.root_extra->build_dir / val_file);
 
       // @@ kconfig issues:
       //
