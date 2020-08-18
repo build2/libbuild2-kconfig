@@ -17,6 +17,7 @@ config BAZ
 
 config ALPHA
 	bool "Alpha support"
+	default y
 	help
 	  This enables alpha. An example directory depenency.
 
@@ -24,11 +25,13 @@ menu "Values"
 
 config INT
 	int "Integer value"
+	default 4321
 	help
 	  This is some integer value.
 
 config HEX
 	hex "Hex value"
+	default 0xdeadbeef
 	help
 	  This is some hex value.
 

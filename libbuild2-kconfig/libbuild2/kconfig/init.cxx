@@ -23,6 +23,62 @@ namespace build2
     {
       context& ctx (rs.ctx);
 
+      auto& vp (rs.var_pool ());
+
+      // The config.kconfig controls the configuration method. Recognized
+      // values are:
+      //
+      // ask
+      //     conf --oldaskconfig
+      //
+      //     Update existing configuration (or create new if none exists)
+      //     using existing values as default answers.
+      //
+      // old
+      //     conf --oldconfig
+      //
+      //     Update existing configuration asking only for newly defined
+      //     options.
+      //
+      // def
+      //     conf --olddefconfig
+      //
+      //     Update existing configuration setting newly defined options to
+      //     their default values.
+      //
+      // new-def [<file>]
+      //     conf --alldefconfig | --defconfig <file>
+      //
+      //     Create a new configuration setting all options to values from
+      //     <file> if specified and to their default values otherwise.
+      //
+      // qconf
+      //     qconf
+      //
+      //     Update existing configuration (or create new if none exists)
+      //     with graphical interface using existing values as defaults.
+      //
+      // mconf
+      //     mconf
+      //
+      //     Update existing configuration (or create new if none exists)
+      //     with menu interface using existing values as defaults.
+      //
+      // env <prog> [<args>]
+      //     <prog> <args> Kconfig
+      //
+      //     Run <prog> in the configuration environment (KCONFIG_CONFIG, etc)
+      //     passing the Kconfig definition file as the last argument. For
+      //     example:
+      //
+      //     config.kconfig="env kconfig-conf --savedefconfig defconfig.kconfig"
+      //
+      const variable& c_k (vp.insert<strings> ("config.kconfig"));
+
+      // Note: always transient and only entering during configure.
+      //
+      config::unsave_variable (rs, c_k);
+
       // We have a complication: we need to load the configuration here and
       // now since anything after (remainder of root.build, buildfiles) can
       // depend on its values. On the other hand, the overall configure meta-
@@ -62,14 +118,6 @@ namespace build2
       // we should keep since configurators only create it if there are
       // changes.
       //
-      // What should the default configuration mode be? If the configuration
-      // doesn't exist, then --oldaskconfig. If the configuration does exists,
-      // then update it with --oldconfig. What if we have .new?  Initially we
-      // treated it as the existing case but if some buildfile flags it as
-      // invalid, then on reconfigure we don't get a chance to change anything
-      // (since from --oldconfig's point of view nothing has changed). So now
-      // we use --oldaskconfig for this case.
-      //
       bool e (false);
       if (!exists (vf))
       {
@@ -81,41 +129,135 @@ namespace build2
         }
       }
 
-      //@@ Before importing and running the tool, we could check ourselves
-      //   whether existing config is good.
+      // Prepare the environment.
       //
-      //   We could also fallback to built-in implementation (for some
-      //   basic modes) if unable to import.
-      //
-      pair<const exe*, import_kind> ir (
-        import_direct<exe> (
-          rs,
-          name ("kconfig-conf", dir_path (), "exe", "kconfig-conf"),
-          true      /* phase2 */,
-          false     /* optional */,
-          false     /* metadata */,
-          l,
-          "module load"));
-
-      //@@ If we were to support normal import, we would have to update the
-      //   target. Maybe one day.
-      //
-      if (ir.second != import_kind::adhoc)
-        fail (l) << "project import of kconfig-conf not supported" <<
-          info << "use config.kconfig_conf to specify executable path";
-
-      const process_path& pp (ir.first->process_path ());
-      cstrings args {pp.recall_string ()};
-
-      args.push_back ("-s");
-      args.push_back (e ? "--oldconfig" : "--oldaskconfig");
-      args.push_back (df.string ().c_str ());
-      args.push_back (nullptr);
-
       strings vars;
       vars.push_back ("KCONFIG_CONFIG=" + vf.string ()); // Keep it first.
 
-      process_env env (pp, vars);
+      // Handle various configuration methods.
+      //
+      string conf;
+      cstrings args {nullptr};
+
+      if (const strings* pms = cast_null<strings> (rs[c_k]))
+      {
+        const strings& ms (*pms);
+
+        if (ms.empty ())
+          fail << "configuration method expected in " << c_k;
+
+        const string& m (ms[0]);
+
+        size_t n (1);
+        if (m == "qconf" ||
+            m == "mconf")
+        {
+          conf = m;
+          args.push_back ("-s");
+        }
+        else if (m == "env")
+        {
+          conf = m;
+          n = ms.size ();
+
+          if (n == 1)
+            fail << "expected program for configuration method env in " << c_k;
+
+          args[0] = ms[1].c_str ();
+
+          for (size_t i (2); i != n; ++i)
+            args.push_back (ms[i].c_str ());
+        }
+        else
+        {
+          conf = "conf";
+          args.push_back ("-s");
+
+          if (m == "ask")
+          {
+            args.push_back ("--oldaskconfig");
+          }
+          else if (m == "old")
+          {
+            args.push_back ("--oldconfig");
+          }
+          else if (m == "def")
+          {
+            args.push_back ("--olddefconfig");
+          }
+          else if (m == "new-def")
+          {
+            if (ms.size () != 1)
+            {
+              args.push_back ("--defconfig");
+              args.push_back (ms[1].c_str ());
+              n = 2;
+            }
+            else
+              args.push_back ("--alldefconfig");
+          }
+          else
+            fail << "unknown configuration method '" << m << "' in " << c_k;
+        }
+
+        if (ms.size () > n)
+          fail << "unexpected argument '" << ms[n] << "' for method " << m
+               << " in " << c_k;
+      }
+      else
+      {
+        // What should the default configuration mode be? If the configuration
+        // doesn't exist, then --oldaskconfig. If the configuration does
+        // exists, then update it with --oldconfig. What if we have .new?
+        // Initially we treated it as the existing case but if some buildfile
+        // flags it as invalid, then on reconfigure we don't get a chance to
+        // change anything (since from --oldconfig's point of view nothing has
+        // changed). So now we use --oldaskconfig for this case.
+        //
+        conf = "conf";
+        args.push_back ("-s");
+        args.push_back (e ? "--oldconfig" : "--oldaskconfig");
+      }
+
+      // Resolve the configurator program.
+      //
+      process_env env;
+
+      if (conf == "env")
+        env = process_env (run_search (args[0]), vars);
+      else
+      {
+        //@@ Before importing and running the configurator (for some modes),
+        //   we could check ourselves whether existing configuration is good.
+        //
+        //   We could also fallback to built-in implementation (for some
+        //   basic modes) if unable to import.
+        //
+        pair<const exe*, import_kind> ir (
+          import_direct<exe> (
+            rs,
+            name ("kconfig-" + conf, dir_path (), "exe", "kconfig-" + conf),
+            true      /* phase2 */,
+            false     /* optional */,
+            false     /* metadata */,
+            l,
+            "module load"));
+
+        //@@ If we were to support normal import, we would have to update the
+        //   target. Maybe one day.
+        //
+        if (ir.second != import_kind::adhoc)
+          fail (l) << "project import of kconfig-" << conf << " not supported" <<
+            info << "use config.kconfig_" << conf << " to specify executable path";
+
+        const process_path& pp (ir.first->process_path ());
+        args[0] = pp.recall_string ();
+
+        env = process_env (pp, vars);
+      }
+
+      args.push_back (df.string ().c_str ());
+      args.push_back (nullptr);
 
       if (verb >= 3)
         print_process (env, args);
