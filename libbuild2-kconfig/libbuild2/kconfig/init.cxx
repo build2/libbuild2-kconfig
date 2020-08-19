@@ -627,7 +627,6 @@ namespace build2
         auto& vp (rs.var_pool ());
 
         size_t i;
-        string n; // Reuse the symbol name buffer.
         const symbol* s;
         for_all_symbols (i, s)
         {
@@ -642,27 +641,9 @@ namespace build2
 
           // Process the name.
           //
-          string var_n ("kconfig.");
-          bool var_q;
-          {
-            n = s->name;
-            lcase (n);
-
-            // See if it's project-qualified.
-            //
-            size_t p (n.find ("__"));
-            var_q = (p != string::npos && p + 2 != n.size ());
-            if (var_q)
-            {
-              //@@ TODO: verify matches project name (icase).
-
-              var_n.append (n, 0, p);
-              var_n += '.';
-              var_n.append (n, p + 2, string::npos);
-            }
-            else
-              var_n += n;
-          }
+          bool var_q (false);
+          string var_n (string ("kconfig.") + s->name);
+          lcase (var_n);
 
           // Enter variable.
           //
