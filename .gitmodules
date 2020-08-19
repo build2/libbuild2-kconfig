@@ -1,4 +1,4 @@
 [submodule "kconfig"]
 	path = kconfig
 	url = https://github.com/build2-packaging/kconfig.git
-	branch = upstream-5.7.6
+	branch = upstream-5.9-rc1
