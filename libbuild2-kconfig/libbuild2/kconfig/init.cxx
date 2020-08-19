@@ -57,7 +57,7 @@ namespace build2
           // Note: not representation (no trailing slash; also SRC_ROOT).
           //
           // It probably won't be helpful to include the slash given the macro
-          // expansion semantics of kconfig.
+          // expansion semantics of Kconfig.
           //
           return val.as<dir_path> ().string ();
         }
@@ -429,7 +429,7 @@ namespace build2
         //@@ Before importing and running the configurator (for some modes),
         //   we could check ourselves whether existing configuration is good.
         //
-        //   We could also fallback to built-in implementation (for some
+        //@@ We could also fallback to built-in implementation (for some
         //   basic modes) if unable to import.
         //
         pair<const exe*, import_kind> ir (
@@ -533,7 +533,7 @@ namespace build2
     void
     boot (scope& rs, const location& l, module_boot_extra& extra)
     {
-      tracer trace ("kconfig::init");
+      tracer trace ("kconfig::boot");
       l5 ([&]{trace << "for " << rs;});
 
       context& ctx (rs.ctx);
@@ -616,12 +616,12 @@ namespace build2
         fail (l) << "unable to load " << vf;
 
       if (conf_get_changed ())
-        fail (l) << "kconfig configuration definition/values have changed" <<
+        fail (l) << "Kconfig configuration definition/values have changed" <<
           info << "reconfigure to synchronize" <<
           info << "configuration definition: " << df <<
           info << "configuration values: " << vf;
 
-      // Set kconfig symbols as kconfig.* variables.
+      // Set Kconfig symbols as kconfig.* variables.
       //
       {
         auto& vp (rs.var_pool ());
@@ -732,7 +732,7 @@ namespace build2
                     // Fall through.
                   }
 
-                  fail (l) << "invalid kconfig int value '" << sv << "'"
+                  fail (l) << "invalid Kconfig int value '" << sv << "'"
                            << endf;
                 }
               case S_HEX:
@@ -754,7 +754,7 @@ namespace build2
                     // Fall through.
                   }
 
-                  fail (l) << "invalid kconfig hex value '" << sv << "'"
+                  fail (l) << "invalid Kconfig hex value '" << sv << "'"
                            << endf;
                 }
               case S_STRING:
@@ -785,7 +785,34 @@ namespace build2
     const module_functions*
     build2_kconfig_load ()
     {
-      //@@ TODO: unset environment variables that may interfere.
+      // Unset Kconfig environment variables that may interfere with our
+      // business. These we allow through:
+      //
+      // KCONFIG_PROBABILITY
+      // ZCONF_DEBUG
+      // KCONFIG_SEED          (conf --randconfig)
+      // KCONFIG_ALLCONFIG     (conf --randconfig)
+      // NCONFIG_MODE          (nconf)
+      // MENUCONFIG_MODE       (mconf)
+      // MENUCONFIG_COLOR      (mconf)
+      //
+      // These don't seem to affect us:
+      //
+      // KCONFIG_NOSILENTUPDATE  (conf --syncconfig)
+      // KCONFIG_CONFIG          (always reset)
+      try
+      {
+        unsetenv ("srctree");
+        unsetenv ("CONFIG_");
+        unsetenv ("KCONFIG_AUTOCONFIG");
+        // unsetenv ("KCONFIG_AUTOHEADER"); // Disabled by KCONFIG_AUTOCONFIG.
+        unsetenv ("KCONFIG_OVERWRITECONFIG");
+      }
+      catch (const system_error& e)
+      {
+        error << "unable to clear Kconfig environment: " << e;
+        return nullptr;
+      }
 
       return mod_functions;
     }
