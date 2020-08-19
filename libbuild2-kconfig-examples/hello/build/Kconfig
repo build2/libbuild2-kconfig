@@ -1,4 +1,8 @@
-config HELLO__FOO
+comment "$(PROJECT) $(VERSION)"
+
+comment "$(SRC_ROOT)"
+
+config FOO
 	bool "Foo support"
 	help
 	  This enables compilation of foo. It is an example of a random
@@ -37,12 +41,13 @@ config HEX
 
 config STR
 	string "String value"
+	#default "$(JUNK)" if FOO
 	help
           This is some string value.
 
 config STR_HELPER
 	string
-	default "foobar" if ALPHA
+	default "$(VERSION)" if ALPHA
 
 endmenu
 

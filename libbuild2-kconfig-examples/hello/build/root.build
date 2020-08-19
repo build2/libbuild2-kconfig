@@ -1,1 +1,8 @@
+
+Kconfig.PROJECT = $project
+Kconfig.VERSION = $version
+Kconfig.TEST = foobar
+Kconfig.PATH = [path] /tmp/foo.txt
+Kconfig.DIR = [dir_path] /tmp/foo/
+
 using kconfig

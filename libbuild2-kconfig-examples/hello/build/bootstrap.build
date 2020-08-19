@@ -1,4 +1,6 @@
-project = basics
+project = hello
+
+version = 1.2.4 # @@ TMP
 
 using config
 using kconfig

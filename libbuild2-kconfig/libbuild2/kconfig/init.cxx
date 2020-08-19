@@ -1,7 +1,10 @@
 #include <libbuild2/kconfig/init.hxx>
 
+#include <cstring> // strcmp() strlen()
+
 #include <libbuild2/file.hxx>
 #include <libbuild2/scope.hxx>
+#include <libbuild2/function.hxx>
 #include <libbuild2/filesystem.hxx>
 #include <libbuild2/diagnostics.hxx>
 
@@ -17,6 +20,201 @@ namespace build2
   {
     static const path def_file ("Kconfig");
     static const path val_file ("config.kconfig");
+
+    // Convert Kconfig.* variable value to Kconfig environment value.
+    //
+    // This is fairly performance-sensitive so we try to optimize things a
+    // bit.
+    //
+    static const string&
+    env_convert (const scope& rs,
+                 const variable& var, const value& val,
+                 string& storage)
+    {
+      try
+      {
+        if (val.type == nullptr)
+        {
+          // Optimize the common case.
+          //
+          const names& ns (val.as<names> ());
+
+          if (ns.size () == 1 && ns[0].simple ())
+            return ns[0].value;
+
+          storage = convert<string> (val);
+        }
+        else if (val.type->is_a<string> ())
+        {
+          return val.as<string> ();
+        }
+        else if (val.type->is_a<path> ())
+        {
+          return val.as<path> ().string ();
+        }
+        else if (val.type->is_a<dir_path> ())
+        {
+          // Note: not representation (no trailing slash; also SRC_ROOT).
+          //
+          // It probably won't be helpful to include the slash given the macro
+          // expansion semantics of kconfig.
+          //
+          return val.as<dir_path> ().string ();
+        }
+        else if (val.type->is_a<project_name> ())
+        {
+          return val.as<project_name> ().string ();
+        }
+        else
+        {
+          // For other typed values call string() for conversion.
+          //
+          value tmp (val);
+          storage = convert<string> (
+            rs.ctx.functions.call (&rs,
+                                   "string",
+                                   vector_view<value> (&tmp, 1),
+                                   location ()));
+        }
+      }
+      catch (const invalid_argument& e)
+      {
+        fail << "unable to convert " << var << " value to string: " << e;
+      }
+
+      return storage;
+    }
+
+    struct env_data
+    {
+      const scope& rs;
+      const location& loc;
+      small_vector<string, 16> evars;
+    };
+
+    extern "C" char*
+    build2_kconfig_getenv (const char* name, void* vd)
+    {
+      env_data& d (*static_cast<env_data*> (vd));
+      const scope& rs (d.rs);
+
+      optional<const char*> r;
+
+      if (strcmp (name, "SRC_ROOT") == 0)
+        r = rs.src_path ().string ().c_str ();
+      else
+      {
+        auto& vs (d.evars);
+        size_t n (strlen (name));
+
+        // First check the cache.
+        //
+        auto i (find_if (vs.begin (), vs.end (),
+                         [name, n] (const string& s)
+                         {
+                           return s.compare (0, n, name) == 0 && s[n] == '=';
+                         }));
+
+        if (i != vs.end ())
+        {
+          r = i->c_str () + n + 1;
+        }
+        else
+        {
+          // Lookup and, if it's expensive to convert, cache.
+          //
+          auto& vp (rs.ctx.var_pool);
+
+          if (const variable* var = vp.find (string ("Kconfig.") + name))
+          {
+            lookup l (rs.vars[var]);
+
+            if (l->null)
+              r = nullptr;
+            else
+            {
+              string s;
+              const string& v (env_convert (rs, *var, *l, s));
+
+              if (&v != &s)
+                r = v.c_str ();
+              else
+              {
+                s.insert (0, 1, '=');
+                s.insert (0, name, n);
+                vs.push_back (move (s));
+                r = vs.back ().c_str () + n + 1;
+              }
+            }
+          }
+        }
+      }
+
+      if (!r)
+      {
+        // It's actually not clear this is a good idea since the variables
+        // appear to be expanded ignoring conditions, for example:
+        //
+        // default "$(FOO)" if BAR
+        //
+        // FOO will be looked up even if BAR is false. So let's see how it
+        // goes, we may have to change this.
+        //
+        fail << "undefined Kconfig variable " << name <<
+          info (d.loc) << "consider setting Kconfig." << name << " variable "
+             << "before loading kconfig module";
+      }
+
+      return const_cast<char*> (*r);
+    }
+
+    // Collect Kconfig environment variables.
+    //
+    // Note: KCONFIG_CONFIG is expected to be first.
+    //
+    static strings
+    env_init (const scope& rs, const path& vf, const variable& K_var)
+    {
+      auto& vp (rs.ctx.var_pool);
+
+      strings evars;
+
+      evars.push_back ("KCONFIG_CONFIG=" + vf.string ());
+      evars.push_back ("SRC_ROOT=" + rs.src_path ().string ());
+
+      // Add Kconfig.* variables if any.
+      //
+      for (auto p (rs.vars.lookup_namespace (K_var));
+           p.first != p.second;
+           ++p.first)
+      {
+        const variable* var (&p.first->first.get ());
+
+        // Annoyingly, this can be one of the overrides (__override,
+        // __prefix, etc).
+        //
+        if (size_t n = var->override ())
+          var = vp.find (string (var->name, 0, n));
+
+        const value& val (p.first->second);
+
+        if (val.null)
+          continue;
+
+        string s;
+        const string& v (env_convert (rs, *var, val, s));
+
+        s.insert (0, 1, '=');
+        s.insert (0, var->name, 8, string::npos);
+
+        if (&v != &s)
+          s += v;
+
+        evars.push_back (move (s));
+      }
+
+      return evars;
+    }
 
     static path
     configure (scope& rs, const location& l, const path& df)
@@ -75,6 +273,10 @@ namespace build2
       //
       const variable& c_k (vp.insert<strings> ("config.kconfig"));
 
+      // Kconfig.* variable prefix.
+      //
+      const variable& K_var (vp.insert ("Kconfig"));
+
       // Note: always transient and only entering during configure.
       //
       config::unsave_variable (rs, c_k);
@@ -105,8 +307,6 @@ namespace build2
       // then present the configuration tree/menu with this configuration's
       // values letting the user tweak what they deem necessary.
       //
-      // @@ TODO: support customzing mode/method via config.kconfig?
-      //
       // @@ COMP: will need to aggregate/disaggregate both files?
 
       path vf (rs.out_path () / rs.root_extra->build_dir / val_file + ".new");
@@ -131,8 +331,7 @@ namespace build2
 
       // Prepare the environment.
       //
-      strings vars;
-      vars.push_back ("KCONFIG_CONFIG=" + vf.string ()); // Keep it first.
+      strings evars (env_init (rs, vf, K_var));
 
       // Handle various configuration methods.
       //
@@ -224,7 +423,7 @@ namespace build2
       process_env env;
 
       if (conf == "env")
-        env = process_env (run_search (args[0]), vars);
+        env = process_env (run_search (args[0]), evars);
       else
       {
         //@@ Before importing and running the configurator (for some modes),
@@ -253,7 +452,7 @@ namespace build2
         const process_path& pp (ir.first->process_path ());
         args[0] = pp.recall_string ();
 
-        env = process_env (pp, vars);
+        env = process_env (pp, evars);
       }
 
       args.push_back (df.string ().c_str ());
@@ -264,7 +463,7 @@ namespace build2
       else if (verb >= 2)
       {
         diag_record dr (text);
-        dr << vars[0] << ' '; print_process (dr, args);
+        dr << evars[0] << ' '; print_process (dr, args);
       }
       else if (verb)
         text << "kconfig " << vf;
@@ -398,6 +597,11 @@ namespace build2
       //
       conf_set_message_callback (nullptr);
 
+      // Handle getenv() calls as Kconfig.* lookups.
+      //
+      env_data edata {rs, l, {}};
+      conf_set_getenv_callback (&build2_kconfig_getenv, &edata);
+
       // Load the configuration definition (Kconfig).
       //
       conf_parse (df.string ().c_str ());
@@ -412,7 +616,7 @@ namespace build2
         fail (l) << "unable to load " << vf;
 
       if (conf_get_changed ())
-        fail (l) << "kconfig configuration definition/value have changed" <<
+        fail (l) << "kconfig configuration definition/values have changed" <<
           info << "reconfigure to synchronize" <<
           info << "configuration definition: " << df <<
           info << "configuration values: " << vf;
@@ -600,6 +804,8 @@ namespace build2
     const module_functions*
     build2_kconfig_load ()
     {
+      //@@ TODO: unset environment variables that may interfere.
+
       return mod_functions;
     }
   }
