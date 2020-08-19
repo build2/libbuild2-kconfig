@@ -175,12 +175,31 @@ namespace build2
     static strings
     env_init (const scope& rs, const path& vf, const variable& var_K)
     {
-      auto& vp (rs.ctx.var_pool);
+      context& ctx (rs.ctx);
+      auto& vp (ctx.var_pool);
+
+      // @@ TODO: maybe this should be customizable (kconfig.kconfig.title?)
+      //
+      string title;
+      const project_name& prj (project (rs));
+      if (!prj.empty ())
+      {
+        title = prj.string ();
+
+        if (const string* ver = cast_null<string> (rs[ctx.var_version]))
+        {
+          title += ' ';
+          title += *ver;
+        }
+      }
 
       strings evars;
 
       evars.push_back ("KCONFIG_CONFIG=" + vf.string ());
       evars.push_back ("SRC_ROOT=" + rs.src_path ().string ());
+
+      if (!title.empty ())
+        evars.push_back ("KCONFIG_MAINMENU=" + title);
 
       // Add Kconfig.* variables if any.
       //
@@ -822,6 +841,7 @@ namespace build2
       //
       // KCONFIG_NOSILENTUPDATE  (conf --syncconfig)
       // KCONFIG_CONFIG          (always reset)
+      // KCONFIG_MAINMENU        (always reset)
       try
       {
         unsetenv ("srctree");
