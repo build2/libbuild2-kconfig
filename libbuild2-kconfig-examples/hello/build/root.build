@@ -5,4 +5,6 @@ Kconfig.TEST = foobar
 Kconfig.PATH = [path] /tmp/foo.txt
 Kconfig.DIR = [dir_path] /tmp/foo/
 
+kconfig = new-def $src_root/build/defconfig.kconfig
+
 using kconfig

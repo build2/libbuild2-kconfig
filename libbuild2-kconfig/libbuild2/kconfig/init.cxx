@@ -173,7 +173,7 @@ namespace build2
     // Note: KCONFIG_CONFIG is expected to be first.
     //
     static strings
-    env_init (const scope& rs, const path& vf, const variable& K_var)
+    env_init (const scope& rs, const path& vf, const variable& var_K)
     {
       auto& vp (rs.ctx.var_pool);
 
@@ -184,7 +184,7 @@ namespace build2
 
       // Add Kconfig.* variables if any.
       //
-      for (auto p (rs.vars.lookup_namespace (K_var));
+      for (auto p (rs.vars.lookup_namespace (var_K));
            p.first != p.second;
            ++p.first)
       {
@@ -271,15 +271,21 @@ namespace build2
       //
       //     config.kconfig="env kconfig-conf --savedefconfig defconfig.kconfig"
       //
-      const variable& c_k (vp.insert<strings> ("config.kconfig"));
+      // The kconfig variable can be set by the project to select the default
+      // method for creating new configurations. For example:
+      //
+      // kconfig = new-def $src_root/build/deconfig.kconfig
+      //
+      const variable& var_c_k (vp.insert<strings> ("config.kconfig"));
+      const variable& var_k   (vp.insert<strings> ("kconfig", false /*ovr*/));
 
       // Kconfig.* variable prefix.
       //
-      const variable& K_var (vp.insert ("Kconfig"));
+      const variable& var_K (vp.insert ("Kconfig"));
 
       // Note: always transient and only entering during configure.
       //
-      config::unsave_variable (rs, c_k);
+      config::unsave_variable (rs, var_c_k);
 
       // We have a complication: we need to load the configuration here and
       // now since anything after (remainder of root.build, buildfiles) can
@@ -318,32 +324,34 @@ namespace build2
       // we should keep since configurators only create it if there are
       // changes.
       //
-      bool e (false);
-      if (!exists (vf))
+      enum {exist_none, exist_cur, exist_new} e (exist_none);
+      if (exists (vf))
+        e = exist_new;
+      else
       {
         path f (vf.base ());
-        if ((e = exists (f)))
+        if (exists (f))
         {
           mvfile (f, vf, 2);
           rmfile (ctx, vf + ".old", 3); // For good measure.
+          e = exist_cur;
         }
       }
 
       // Prepare the environment.
       //
-      strings evars (env_init (rs, vf, K_var));
+      strings evars (env_init (rs, vf, var_K));
 
       // Handle various configuration methods.
       //
       string conf;
       cstrings args {nullptr};
 
-      if (const strings* pms = cast_null<strings> (rs[c_k]))
+      auto process_method = [&conf, &args] (const strings& ms,
+                                            const variable& var)
       {
-        const strings& ms (*pms);
-
         if (ms.empty ())
-          fail << "configuration method expected in " << c_k;
+          fail << "configuration method expected in " << var;
 
         const string& m (ms[0]);
 
@@ -360,7 +368,7 @@ namespace build2
           n = ms.size ();
 
           if (n == 1)
-            fail << "expected program for configuration method env in " << c_k;
+            fail << "expected program for configuration method env in " << var;
 
           args[0] = ms[1].c_str ();
 
@@ -396,26 +404,40 @@ namespace build2
               args.push_back ("--alldefconfig");
           }
           else
-            fail << "unknown configuration method '" << m << "' in " << c_k;
+            fail << "unknown configuration method '" << m << "' in " << var;
         }
 
         if (ms.size () > n)
           fail << "unexpected argument '" << ms[n] << "' for method " << m
-               << " in " << c_k;
-      }
-      else
+               << " in " << var;
+      };
+
       {
-        // What should the default configuration mode be? If the configuration
-        // doesn't exist, then --oldaskconfig. If the configuration does
-        // exists, then update it with --oldconfig. What if we have .new?
-        // Initially we treated it as the existing case but if some buildfile
-        // flags it as invalid, then on reconfigure we don't get a chance to
-        // change anything (since from --oldconfig's point of view nothing has
-        // changed). So now we use --oldaskconfig for this case.
-        //
-        conf = "conf";
-        args.push_back ("-s");
-        args.push_back (e ? "--oldconfig" : "--oldaskconfig");
+        const strings* m (cast_null<strings> (rs[var_c_k]));
+
+        if (m != nullptr)
+        {
+          process_method (*m, var_c_k);
+        }
+        else if (e == exist_none &&
+                 (m = cast_null<strings> (rs[var_k])) != nullptr)
+        {
+          process_method (*m, var_k);
+        }
+        else
+        {
+          // What should the default configuration mode be? If the it doesn't
+          // exist, then --oldaskconfig. If it does exists, then update it
+          // with --oldconfig. What if we have .new?  Initially we treated it
+          // as the existing case but if some buildfile flags it as invalid,
+          // then on reconfigure we don't get a chance to change anything
+          // (since from --oldconfig's point of view nothing has changed). So
+          // now we use --oldaskconfig for this case.
+          //
+          conf = "conf";
+          args.push_back ("-s");
+          args.push_back (e == exist_cur ? "--oldconfig" : "--oldaskconfig");
+        }
       }
 
       // Resolve the configurator program.
