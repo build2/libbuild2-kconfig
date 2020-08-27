@@ -21,6 +21,38 @@ namespace build2
     static const path def_file ("Kconfig");
     static const path val_file ("config.kconfig");
 
+    // Currently, the Kconfig machinery only recognizes paths with forward
+    // slashes. While this can probably be fixed, forming a path (say, in the
+    // source directive) in a platform-aware way is unlikely to ever be
+    // possible. So, at least for now, let's keep things simple and consistent
+    // by passing paths with forward slahes on Windows.
+    //
+    // Note that we leave it up to the user to convert any other path
+    // variables being passed, if necessary.
+    //
+    // Note also that for dir_path we return string, not representation (so no
+    // trailing slash). It probably won't be helpful to include the slash
+    // given the macro expansion semantics of Kconfig.
+    //
+    //
+#ifndef _WIN32
+    template <typename P>
+    static inline const string&
+    env_path (const P& p)
+    {
+      return p.string ();
+    }
+#else
+    template <typename P>
+    static inline string
+    env_path (const P& p)
+    {
+      P t (p);
+      t.canonicalize ('/');
+      return move (t).string ();
+    }
+#endif
+
     // Convert Kconfig.* variable value to Kconfig environment value.
     //
     // This is fairly performance-sensitive so we try to optimize things a
@@ -54,10 +86,7 @@ namespace build2
         }
         else if (val.type->is_a<dir_path> ())
         {
-          // Note: not representation (no trailing slash; also SRC_ROOT).
-          //
-          // It probably won't be helpful to include the slash given the macro
-          // expansion semantics of Kconfig.
+          // Note: not representation (see env_path() for details).
           //
           return val.as<dir_path> ().string ();
         }
@@ -90,6 +119,9 @@ namespace build2
       const scope& rs;
       const location& loc;
       small_vector<string, 16> evars;
+#ifdef _WIN32
+      optional<string> src_root;
+#endif
     };
 
     extern "C" char*
@@ -101,7 +133,16 @@ namespace build2
       optional<const char*> r;
 
       if (strcmp (name, "SRC_ROOT") == 0)
-        r = rs.src_path ().string ().c_str ();
+      {
+#ifndef _WIN32
+        r = env_path (rs.src_path ()).c_str ();
+#else
+        if (!d.src_root)
+          d.src_root = env_path (rs.src_path ());
+
+        r = d.src_root->c_str ();
+#endif
+      }
       else
       {
         auto& vs (d.evars);
@@ -195,8 +236,8 @@ namespace build2
 
       strings evars;
 
-      evars.push_back ("KCONFIG_CONFIG=" + vf.string ());
-      evars.push_back ("SRC_ROOT=" + rs.src_path ().string ());
+      evars.push_back ("KCONFIG_CONFIG=" + env_path (vf));
+      evars.push_back ("SRC_ROOT=" + env_path (rs.src_path ()));
 
       if (!title.empty ())
         evars.push_back ("KCONFIG_MAINMENU=" + title);
@@ -365,9 +406,11 @@ namespace build2
       //
       string conf;
       cstrings args {nullptr};
+      string arg_df;
+      string arg_cf;
 
-      auto process_method = [&conf, &args] (const strings& ms,
-                                            const variable& var)
+      auto process_method = [&conf, &args, &arg_cf] (const strings& ms,
+                                                     const variable& var)
       {
         if (ms.empty ())
           fail << "configuration method expected in " << var;
@@ -416,7 +459,7 @@ namespace build2
             if (ms.size () != 1)
             {
               args.push_back ("--defconfig");
-              args.push_back (ms[1].c_str ());
+              args.push_back ((arg_cf = env_path (path (ms[1]))).c_str ());
               n = 2;
             }
             else
@@ -496,7 +539,7 @@ namespace build2
         env = process_env (pp, evars);
       }
 
-      args.push_back (df.string ().c_str ());
+      args.push_back ((arg_df = env_path (df)).c_str ());
       args.push_back (nullptr);
 
       if (verb >= 3)
@@ -628,24 +671,20 @@ namespace build2
                ? configure (rs, l, df)
                : rs.out_path () / rs.root_extra->build_dir / val_file);
 
-      // @@ kconfig issues:
-      //
-      // - Diagnostics is all over the place, exit(1) on error.
-      //
       auto conf_g (make_guard ([] () {conf_free ();}));
 
       // Disable extra diagnostics.
       //
       conf_set_message_callback (nullptr);
 
-      // Handle getenv() calls as Kconfig.* lookups.
+      // Resolve getenv() calls as Kconfig.* lookups.
       //
       env_data edata {rs, l, {}};
       conf_set_getenv_callback (&build2_kconfig_getenv, &edata);
 
       // Load the configuration definition (Kconfig).
       //
-      conf_parse (df.string ().c_str ());
+      conf_parse (env_path (df).c_str ());
 
       // Load the configuration values.
       //
@@ -653,7 +692,7 @@ namespace build2
         fail (l) << vf << " does not exist" <<
           info << "consider configuring " << rs.out_path ();
 
-      if (conf_read (vf.string ().c_str ()) != 0)
+      if (conf_read (env_path (vf).c_str ()) != 0)
         fail (l) << "unable to load " << vf;
 
       if (conf_get_changed ())
