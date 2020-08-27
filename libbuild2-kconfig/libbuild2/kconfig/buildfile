@@ -59,7 +59,7 @@ cc.poptions =+ "-I$out_root" "-I$src_root" "-I$src_base"
 
 # Disable autoconfig support.
 #
-cc.poptions += -DKCONFIG_AUTOCONFIG=NULL
+cc.poptions += -DKCONFIG_AUTOCONFIG=NULL -DKCONFIG_REGEX=0
 
 obja{*}: cc.poptions += -DLIBBUILD2_KCONFIG_STATIC_BUILD
 objs{*}: cc.poptions += -DLIBBUILD2_KCONFIG_SHARED_BUILD
