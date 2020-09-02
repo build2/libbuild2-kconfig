@@ -383,7 +383,7 @@ namespace build2
 
       // Note: always transient and only entering during configure.
       //
-      config::unsave_variable (rs, var_c_k);
+      config::unsave_variable (rs, var_c_k); //@@ Does not work (new-def)!
 
       // We have a complication: we need to load the configuration here and
       // now since anything after (remainder of root.build, buildfiles) can
@@ -436,10 +436,6 @@ namespace build2
         }
       }
 
-      // Prepare the environment.
-      //
-      strings evars (env_init (rs, vf, var_K));
-
       // Handle various configuration methods.
       //
       string conf;
@@ -477,6 +473,8 @@ namespace build2
         }
         else
         {
+          // Note: mode option position must be 2.
+          //
           conf = "conf";
           args.push_back ("-s");
 
@@ -537,63 +535,135 @@ namespace build2
           // (since from --oldconfig's point of view nothing has changed). So
           // now we use --oldaskconfig for this case.
           //
+          // Note: mode option position must be 2.
+          //
           conf = "conf";
           args.push_back ("-s");
           args.push_back (e == exist_old ? "--oldconfig" : "--oldaskconfig");
         }
       }
 
-      // Resolve the configurator program.
-      //
-      process_env env;
-
-      if (conf == "env")
-        env = process_env (run_search (args[0]), evars);
-      else
-      {
-        //@@ Before importing and running the configurator (for some modes),
-        //   we could check ourselves whether existing configuration is good.
-        //
-        //@@ We could also fallback to built-in implementation (for some
-        //   basic modes) if unable to import.
-        //
-        pair<const exe*, import_kind> ir (
-          import_direct<exe> (
-            rs,
-            name ("kconfig-" + conf, dir_path (), "exe", "kconfig-" + conf),
-            true      /* phase2 */,
-            false     /* optional */,
-            false     /* metadata */,
-            l,
-            "module load"));
-
-        //@@ If we were to support normal import, we would have to update the
-        //   target. Maybe one day.
-        //
-        if (ir.second != import_kind::adhoc)
-          fail (l) << "project import of kconfig-" << conf << " not supported" <<
-            info << "use config.kconfig_" << conf << " to specify executable path";
-
-        const process_path& pp (ir.first->process_path ());
-        args[0] = pp.recall_string ();
-
-        env = process_env (pp, evars);
-      }
-
       args.push_back ((arg_df = env_path (df)).c_str ());
       args.push_back (nullptr);
 
-      if (verb >= 3)
-        print_process (env, args);
-      else if (verb >= 2)
+      // Handle some conf modes as built-in. The main advantage is that we
+      // don't need the presence of the kconfig-conf executable.
+      //
+      // Note that the performance is not too important here so we don't try
+      // to optimize things too much. Specifically, we keep it as args so that
+      // we can easily switch back to the executable (say, for debugging).
+      //
+      // Also, we could have "returned" the kconfig state saving the caller
+      // the conf_parse/read() calls. But that would complicate the interface
+      // plus the re-load serves as an extra sanity check (the configuration
+      // we produce should not be out of date).
+      //
+      string mode;
+      if (conf == "conf" && ((mode = args[2]) == "--defconfig"    ||
+                             (mode          ) == "--olddefconfig" ||
+                             (mode          ) == "--alldefconfig"))
       {
-        diag_record dr (text);
-        dr << evars[0] << ' '; print_process (dr, args);
-      }
-      else if (verb)
-        text << "kconfig " << vf;
+        args[0] = "kconfig-conf";
+        string arg_vf (env_path (vf));
 
-      run (env, args);
+        if (verb >= 2)
+        {
+          diag_record dr (text);
+          dr << "KCONFIG_CONFIG=" << arg_vf << ' '; print_process (dr, args);
+        }
+        else if (verb)
+          text << "kconfig " << vf;
+
+        // Similar code to init() below.
+        //
+        auto conf_g (make_guard ([] () {conf_free ();}));
+
+        conf_set_message_callback (nullptr);
+
+        env_data edata {rs, l, {}};
+        conf_set_getenv_callback (&build2_kconfig_getenv, &edata);
+
+        conf_parse (arg_df.c_str ());
+
+        if (mode == "--defconfig")
+        {
+          const char* f (args[3]); // Already env_path'ed.
+
+          if (conf_read (f) != 0)
+            fail (l) << "unable to load " << f;
+
+          conf_set_all_new_symbols (def_default);
+        }
+        else if (mode == "--olddefconfig")
+        {
+          if (conf_read (arg_vf.c_str ()) != 0)
+            fail (l) << "unable to load " << vf;
+
+          // @@ This call is missing in conf.c for some reason!
+          //
+          conf_set_all_new_symbols (def_default);
+        }
+        else if (mode == "--alldefconfig")
+        {
+          conf_set_all_new_symbols (def_default);
+        }
+
+        if (conf_write (arg_vf.c_str ()) != 0)
+          fail (l) << "unable to save " << vf;
+      }
+      else
+      {
+        // Prepare the environment.
+        //
+        strings evars (env_init (rs, vf, var_K));
+
+        // Resolve the configurator program.
+        //
+        process_env env;
+
+        if (conf == "env")
+          env = process_env (run_search (args[0]), evars);
+        else
+        {
+          //@@ Before importing and running the configurator (for some modes),
+          //   we could check ourselves whether existing configuration is up
+          //   to date?
+          //
+          pair<const exe*, import_kind> ir (
+            import_direct<exe> (
+              rs,
+              name ("kconfig-" + conf, dir_path (), "exe", "kconfig-" + conf),
+              true      /* phase2 */,
+              false     /* optional */,
+              false     /* metadata */,
+              l,
+              "module load"));
+
+          //@@ If we were to support normal import, we would have to update
+          //   the target. Maybe one day.
+          //
+          if (ir.second != import_kind::adhoc)
+            fail (l) << "project import of kconfig-" << conf << " not supported" <<
+              info << "use config.kconfig_" << conf << " to specify executable path";
+
+          const process_path& pp (ir.first->process_path ());
+          args[0] = pp.recall_string ();
+
+          env = process_env (pp, evars);
+        }
+
+        if (verb >= 3)
+          print_process (env, args);
+        else if (verb >= 2)
+        {
+          diag_record dr (text);
+          dr << evars[0] << ' '; print_process (dr, args);
+        }
+        else if (verb)
+          text << "kconfig " << vf;
+
+        run (env, args);
+      }
 
       return vf;
     }
@@ -717,6 +787,8 @@ namespace build2
                ? configure (rs, l, df)
                : rs.out_path () / rs.root_extra->build_dir / val_file);
 
+      // Note: similar code in configure() above.
+      //
       auto conf_g (make_guard ([] () {conf_free ();}));
 
       // Disable extra diagnostics.
