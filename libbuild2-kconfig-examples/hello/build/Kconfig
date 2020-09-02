@@ -41,7 +41,7 @@ config HEX
 
 config STR
 	string "String value"
-	#default "$(JUNK)" if FOO
+	default "Hello from STR"
 	help
           This is some string value.
 

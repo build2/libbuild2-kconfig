@@ -37,21 +37,33 @@ namespace build2
     //
 #ifndef _WIN32
     template <typename P>
-    static inline const string&
-    env_path (const P& p)
+    static inline auto
+    env_path (P&& p) // -> const string&|string
     {
-      return p.string ();
+      return forward<P> (p).string ();
     }
 #else
     template <typename P>
     static inline string
-    env_path (const P& p)
+    env_path (P p)
     {
-      P t (p);
-      t.canonicalize ('/');
-      return move (t).string ();
+      p.canonicalize ('/');
+      return move (p).string ();
     }
 #endif
+
+    static inline string
+    env_path (string s)
+    {
+      try
+      {
+        return env_path (path (move (s)));
+      }
+      catch (const invalid_path& e)
+      {
+        fail << "invalid path '" << e.path << "'";
+      }
+    }
 
     // Convert Kconfig.* variable value to Kconfig environment value.
     //
@@ -286,19 +298,19 @@ namespace build2
       // The config.kconfig controls the configuration method. Recognized
       // values are:
       //
-      // ask
+      // ask (old-ask-all)
       //     conf --oldaskconfig
       //
       //     Update existing configuration (or create new if none exists)
-      //     using existing values as default answers.
+      //     using old values as default answers.
       //
-      // old
+      // old (old-ask-new)
       //     conf --oldconfig
       //
       //     Update existing configuration asking only for newly defined
       //     options.
       //
-      // def
+      // def (old-def)
       //     conf --olddefconfig
       //
       //     Update existing configuration setting newly defined options to
@@ -308,19 +320,21 @@ namespace build2
       //     conf --alldefconfig | --defconfig <file>
       //
       //     Create a new configuration setting all options to values from
-      //     <file> if specified and to their default values otherwise.
+      //     <file> if specified and to their default values otherwise (if
+      //     come options are missing from <file>, they are set to default
+      //     values as well).
       //
       // qconf
       //     qconf
       //
       //     Update existing configuration (or create new if none exists)
-      //     with graphical interface using existing values as defaults.
+      //     with graphical interface using old values as defaults.
       //
       // mconf
       //     mconf
       //
       //     Update existing configuration (or create new if none exists)
-      //     with menu interface using existing values as defaults.
+      //     with menu interface using old values as defaults.
       //
       // env <prog> [<args>]
       //     <prog> <args> Kconfig
@@ -331,17 +345,41 @@ namespace build2
       //
       //     config.kconfig="env kconfig-conf --savedefconfig defconfig.kconfig"
       //
-      // The kconfig variable can be set by the project to select the default
-      // method for creating new configurations. For example:
+      // @@ Missing plausible methods:
       //
-      // kconfig = new-def $src_root/build/deconfig.kconfig
+      //    - new-ask        -- drop existing config
       //
-      const variable& var_c_k (vp.insert<strings> ("config.kconfig"));
-      const variable& var_k   (vp.insert<strings> ("kconfig", false /*ovr*/));
+      //    - old-def <file> -- take defaults for new values from file (not
+      //                        going to be trivial to implement, maybe as
+      //                        two loads, saving symbols/value in-between).
+      //
+      // The kconfig.kconfig.{configure,reconfigure,retryconfigure} variables
+      // can be set by the project to select the default method for creating
+      // new, updating existing, and trying to fix previously created/updated
+      // configurations, respectively. For example: @@ old-def
+      //
+      // kconfig.kconfig.configure = new-def $src_root/build/deconfig.kconfig
+      // kconfig.kconfig.reconfigure = old-def $src_root/build/deconfig.kconfig
+      //
+      // The default methods for these variables are `ask`, `old`, and `ask`,
+      // respectively (see below for rationale).
+      //
+      // The kconfig.kconfig.transient variable (entered in init()) can be set
+      // by the project to select the transient configuration method. If
+      // unspecified, then the `new-def` method is used (all options set to
+      // their default values). Setting the method to `ask` disables the
+      // ability to use transient configurations. For example:
+      //
+      // kconfig.kconfig.transient = new-def $src_root/build/deconfig.kconfig
+      //
+      auto& var_c_k   (vp.insert<strings> ("config.kconfig"));
+      auto& var_k_k_c (vp.insert<strings> ("kconfig.kconfig.configure"));
+      auto& var_k_k_r (vp.insert<strings> ("kconfig.kconfig.reconfigure"));
+      auto& var_k_k_y (vp.insert<strings> ("kconfig.kconfig.retryconfigure"));
 
       // Kconfig.* variable prefix.
       //
-      const variable& var_K (vp.insert ("Kconfig"));
+      auto& var_K (vp.insert ("Kconfig"));
 
       // Note: always transient and only entering during configure.
       //
@@ -384,7 +422,7 @@ namespace build2
       // we should keep since configurators only create it if there are
       // changes.
       //
-      enum {exist_none, exist_cur, exist_new} e (exist_none);
+      enum {exist_none, exist_old, exist_new} e (exist_none);
       if (exists (vf))
         e = exist_new;
       else
@@ -394,7 +432,7 @@ namespace build2
         {
           mvfile (f, vf, 2);
           rmfile (ctx, vf + ".old", 3); // For good measure.
-          e = exist_cur;
+          e = exist_old;
         }
       }
 
@@ -459,7 +497,7 @@ namespace build2
             if (ms.size () != 1)
             {
               args.push_back ("--defconfig");
-              args.push_back ((arg_cf = env_path (path (ms[1]))).c_str ());
+              args.push_back ((arg_cf = env_path (ms[1])).c_str ());
               n = 2;
             }
             else
@@ -475,20 +513,23 @@ namespace build2
       };
 
       {
-        const strings* m (cast_null<strings> (rs[var_c_k]));
+        const variable* v (&var_c_k);
+        const strings* m (cast_null<strings> (rs[*v]));
+
+        if (m == nullptr)
+        {
+          v = (e == exist_none ? &var_k_k_c :
+               e == exist_old  ? &var_k_k_r :
+               e == exist_new  ? &var_k_k_y : nullptr);
+
+          m = cast_null<strings> (rs[*v]);
+        }
 
         if (m != nullptr)
-        {
-          process_method (*m, var_c_k);
-        }
-        else if (e == exist_none &&
-                 (m = cast_null<strings> (rs[var_k])) != nullptr)
-        {
-          process_method (*m, var_k);
-        }
+          process_method (*m, *v);
         else
         {
-          // What should the default configuration mode be? If the it doesn't
+          // What should the default configuration mode be? If it doesn't
           // exist, then --oldaskconfig. If it does exists, then update it
           // with --oldconfig. What if we have .new?  Initially we treated it
           // as the existing case but if some buildfile flags it as invalid,
@@ -498,7 +539,7 @@ namespace build2
           //
           conf = "conf";
           args.push_back ("-s");
-          args.push_back (e == exist_cur ? "--oldconfig" : "--oldaskconfig");
+          args.push_back (e == exist_old ? "--oldconfig" : "--oldaskconfig");
         }
       }
 
@@ -659,6 +700,11 @@ namespace build2
       }
 
       context& ctx (rs.ctx);
+      auto& vp (rs.var_pool ());
+
+      // See configure().
+      //
+      auto& var_k_k_t (vp.insert<strings> ("kconfig.kconfig.transient"));
 
       path df (rs.src_path () / rs.root_extra->build_dir / def_file);
 
@@ -688,28 +734,86 @@ namespace build2
 
       // Load the configuration values.
       //
-      if (!exists (vf))
-        fail (l) << vf << " does not exist" <<
-          info << "consider configuring " << rs.out_path ();
+      bool calc (false);
+      if (exists (vf))
+      {
+        if (conf_read (env_path (vf).c_str ()) != 0)
+          fail (l) << "unable to load " << vf;
 
-      if (conf_read (env_path (vf).c_str ()) != 0)
-        fail (l) << "unable to load " << vf;
+        if (conf_get_changed ())
+          fail (l) << "Kconfig configuration definition/values have changed" <<
+            info << "reconfigure to synchronize" <<
+            info << "configuration definition: " << df <<
+            info << "configuration values: " << vf;
+      }
+      else
+      {
+        const strings* ms (cast_null<strings> (rs[var_k_k_t]));
 
-      if (conf_get_changed ())
-        fail (l) << "Kconfig configuration definition/values have changed" <<
-          info << "reconfigure to synchronize" <<
-          info << "configuration definition: " << df <<
-          info << "configuration values: " << vf;
+        if (ms != nullptr && ms->empty ())
+          fail << "configuration method expected in " << var_k_k_t;
+
+        const string& m (ms != nullptr ? (*ms)[0] : "new-def");
+
+        if (m == "ask")
+          fail (l) << vf << " does not exist" <<
+            info << "consider configuring " << rs.out_path ();
+
+        if (m != "new-def")
+          fail << "unexpected configuration method '" << m << "' in "
+               << var_k_k_t;
+
+        switch (ms != nullptr ? ms->size () : 1)
+        {
+        case 1:
+          {
+            // --alldefconfig
+            //
+            conf_set_all_new_symbols (def_default);
+            calc = true;
+            break;
+          }
+        case 2:
+          {
+            // --defconfig <file>
+            //
+            const string& f ((*ms)[1]);
+
+            // Note: using conf_read_simple() does not work for some reason
+            // (even with the below value calculation).
+            //
+            if (conf_read (env_path (f).c_str ()) != 0)
+              fail (l) << "unable to load " << f;
+
+            // Note: appears to return true even for complete configurations
+            // created with --savedefconfig.
+            //
+            calc = conf_set_all_new_symbols (def_default);
+            break;
+          }
+        default:
+          {
+            fail << "unexpected argument '" << (*ms)[2] << "' for method "
+                 << m << " in " << var_k_k_t;
+          }
+        }
+      }
 
       // Set Kconfig symbols as kconfig.* variables.
       //
       {
-        auto& vp (rs.var_pool ());
+        // If requested, calculate symbol values, similar to conf_read().
+        //
+        if (calc)
+          sym_calc_value (modules_sym);
 
         size_t i;
-        const symbol* s;
+        symbol* s;
         for_all_symbols (i, s)
         {
+          if (calc)
+            sym_calc_value (s);
+
           // See kconfig-dump for semantics of these tests.
           //
           if (s->name == nullptr   ||
