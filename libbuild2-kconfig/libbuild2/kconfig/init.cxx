@@ -36,16 +36,23 @@ namespace build2
     //
     //
 #ifndef _WIN32
-    template <typename P>
-    static inline auto
-    env_path (P&& p) // -> const string&|string
+    template <typename K>
+    static inline string
+    env_path (basic_path<char, K>&& p)
     {
-      return forward<P> (p).string ();
+      return move (p).string ();
+    }
+
+    template <typename K>
+    static inline const string&
+    env_path (const basic_path<char, K>& p)
+    {
+      return p.string ();
     }
 #else
-    template <typename P>
+    template <typename K>
     static inline string
-    env_path (P p)
+    env_path (basic_path<char, K> p)
     {
       p.canonicalize ('/');
       return move (p).string ();
