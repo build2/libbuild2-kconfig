@@ -1,0 +1,44 @@
+# Note: --silent rather than --quiet to suppress module update diagnostics.
+#
+test.options += --no-default-options --serial-stop --silent --buildfile -
+test.arguments = noop
+
++cat <<EOI >=bootstrap.build
+project = basics
+amalgamation =
+subprojects =
+
+using config
+using kconfig
+EOI
+
++cat <<EOI >=root.build
+ EOI
+
++cat <<EOI >=Kconfig
+config FOO
+	bool "Foo support"
+	default y
+
+config BAR
+	bool "Bar support"
+
+config BAZ
+	bool "Baz support"
+	depends on BAR
+	default y
+EOI
+
+: transient
+:
+mkdir build;
+ln -s ../../bootstrap.build ../../root.build ../../Kconfig build/;
+$* <<EOI >>EOO
+print $kconfig.foo
+print $kconfig.bar
+print $kconfig.baz
+EOI
+true
+false
+false
+EOO
