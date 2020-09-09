@@ -68,7 +68,7 @@ namespace build2
       }
       catch (const invalid_path& e)
       {
-        fail << "invalid path '" << e.path << "'";
+        fail << "invalid path '" << e.path << "'" << endf;
       }
     }
 

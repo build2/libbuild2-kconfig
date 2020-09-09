@@ -64,8 +64,16 @@ cc.poptions += -DKCONFIG_AUTOCONFIG=NULL -DKCONFIG_REGEX=0
 obja{*}: cc.poptions += -DLIBBUILD2_KCONFIG_STATIC_BUILD
 objs{*}: cc.poptions += -DLIBBUILD2_KCONFIG_SHARED_BUILD
 
-if ($c.class == 'gcc')
-  c.coptions += -Wno-extra -Wno-error
+# Disable warnings in Kconfig code.
+#
+switch $c.class
+{
+  case 'gcc'
+    c.coptions += -Wno-extra -Wno-error
+
+  case 'msvc'
+    c.coptions += /w
+}
 
 # Export options.
 #
