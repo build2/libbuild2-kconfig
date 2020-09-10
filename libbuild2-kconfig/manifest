@@ -13,4 +13,4 @@ requires: bootstrap
 depends: * build2 >= 0.14.0-
 depends: * bpkg >= 0.14.0-
 tests: libbuild2-kconfig-tests == $
-examples: libbuild2-kconfig-examples == $
+#examples: libbuild2-kconfig-examples == $
