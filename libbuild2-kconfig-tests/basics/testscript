@@ -1,44 +1,97 @@
 # Note: --silent rather than --quiet to suppress module update diagnostics.
 #
 test.options += --no-default-options --serial-stop --silent --buildfile -
-test.arguments = noop
 
 +cat <<EOI >=bootstrap.build
-project = basics
-amalgamation =
-subprojects =
+  project = basics
+  amalgamation =
+  subprojects =
 
-using config
-using kconfig
-EOI
+  using config
+  using kconfig
+  EOI
 
 +cat <<EOI >=root.build
- EOI
+  EOI
 
 +cat <<EOI >=Kconfig
-config FOO
-	bool "Foo support"
-	default y
+  config FOO
+  	bool "Foo support"
+  	default y
 
-config BAR
-	bool "Bar support"
+  config BAR
+  	bool "Bar support"
 
-config BAZ
-	bool "Baz support"
-	depends on BAR
-	default y
-EOI
+  config BAZ
+  	bool "Baz support"
+  	depends on BAR
+  	default y
+  EOI
 
 : transient
 :
 mkdir build;
 ln -s ../../bootstrap.build ../../root.build ../../Kconfig build/;
-$* <<EOI >>EOO
-print $kconfig.foo
-print $kconfig.bar
-print $kconfig.baz
-EOI
-true
-false
-false
-EOO
+$* noop <<EOI >>EOO
+  print $kconfig.foo
+  print $kconfig.bar
+  print $kconfig.baz
+  EOI
+  true
+  false
+  false
+  EOO
+
+: source
+:
+mkdir build;
+ln -s ../../bootstrap.build ../../root.build build/;
+ln -s ../Kconfig ./;
+cat <<EOI >=build/Kconfig;
+  source "$(SRC_ROOT)/Kconfig"
+  EOI
+$* noop <<EOI >>EOO
+  print $kconfig.foo
+  print $kconfig.bar
+  print $kconfig.baz
+  EOI
+  true
+  false
+  false
+  EOO
+
+# NOTE: paths passed to Kconfig on Windows use forward slashes.
+
+: source-error
+:
+mkdir build;
+ln -s ../../bootstrap.build ../../root.build build/;
+cat <<EOI >=build/Kconfig;
+  source "$(SRC_ROOT)/Kconfig"
+  EOI
+$* noop <'' 2>>~%EOE% != 0
+  %.+/source-error/build/Kconfig:1: can't open file ".+/source-error/Kconfig"%
+  EOE
+
+: syntax-error
+:
+mkdir build;
+ln -s ../../bootstrap.build ../../root.build build/;
+cat <<EOI >=build/Kconfig;
+  source abc
+  EOI
+$* noop <'' 2>>~%EOE% != 0
+  %.+/Kconfig:2: syntax error%
+  %.+/Kconfig:1: invalid statement%
+  EOE
+
+: value-warning
+:
+mkdir build;
+ln -s ../../bootstrap.build ../../root.build ../../Kconfig build/;
+cat <<EOI >=build/config.kconfig;
+  JUNK
+  EOI
+$* configure config.kconfig=def <'./:' 2>>~%EOE% &build/config.build &build/config.kconfig.old
+  %.+/build/config.kconfig.new:1: warning: unexpected data: JUNK%
+  EOE
