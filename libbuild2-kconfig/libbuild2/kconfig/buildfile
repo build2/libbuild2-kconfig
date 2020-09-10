@@ -69,7 +69,12 @@ objs{*}: cc.poptions += -DLIBBUILD2_KCONFIG_SHARED_BUILD
 switch $c.class
 {
   case 'gcc'
+  {
     c.coptions += -Wno-extra -Wno-error
+
+    if ($c.target.class == 'windows')
+      c.coptions += -Wno-deprecated-declarations
+  }
 
   case 'msvc'
     c.coptions += /w
