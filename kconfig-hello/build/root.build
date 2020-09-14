@@ -4,8 +4,8 @@ if ($build.meta_operation != 'info' && $build.meta_operation != 'dist')
   Kconfig.PROJECT = $project
   Kconfig.VERSION = $version
   Kconfig.TEST = foobar
-  Kconfig.PATH = [path] /tmp/foo.txt
-  Kconfig.DIR = [dir_path] /tmp/foo/
+  Kconfig.PATH = [path] $src_root/manifest
+  Kconfig.DIR = [dir_path] $out_root
 
   kconfig.kconfig.configure = new-def $src_root/build/defconfig.kconfig
   kconfig.kconfig.transient = new-def $src_root/build/defconfig.kconfig
