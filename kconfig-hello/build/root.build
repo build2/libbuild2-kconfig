@@ -9,3 +9,5 @@ kconfig.kconfig.configure = new-def $src_root/build/defconfig.kconfig
 kconfig.kconfig.transient = new-def $src_root/build/defconfig.kconfig
 
 using kconfig
+
+assert $kconfig.alpha "need alpha"

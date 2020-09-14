@@ -1,6 +1,7 @@
 # Note: --silent rather than --quiet to suppress module update diagnostics.
 #
-test.options += --no-default-options --serial-stop --silent --buildfile -
+# @@ TMP --no-default-options
+test.options += --serial-stop --silent --buildfile -
 
 +cat <<EOI >=bootstrap.build
   project = basics

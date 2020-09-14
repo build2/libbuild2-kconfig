@@ -1,7 +1,6 @@
-project = hello
+project = kconfig-hello
 
-version = 1.2.4 # @@ TMP
-
+using version
 using config
 using kconfig
 using test

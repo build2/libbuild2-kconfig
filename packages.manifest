@@ -2,5 +2,5 @@
 location: libbuild2-kconfig/
 :
 location: libbuild2-kconfig-tests/
-#:
-#location: libbuild2-kconfig-examples/
+:
+location: kconfig-hello/
