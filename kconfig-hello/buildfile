@@ -1,3 +1,4 @@
-info $kconfig.str
+if ($build.meta_operation != 'info' && $build.meta_operation != 'dist')
+  info $kconfig.str
 
 ./: {*/ -build/} doc{README.md} legal{LICENSE AUTHORS} manifest

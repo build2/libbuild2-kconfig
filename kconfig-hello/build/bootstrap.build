@@ -2,6 +2,7 @@ project = kconfig-hello
 
 using version
 using config
-using kconfig
+if ($build.meta_operation != 'info' && $build.meta_operation != 'dist')
+  using kconfig
 using test
 using dist
