@@ -302,49 +302,75 @@ namespace build2
 
       auto& vp (rs.var_pool ());
 
-      // The config.kconfig controls the configuration method. Recognized
-      // values are:
+      // The config.kconfig variable controls the configuration method. Its
+      // value has the following structure:
       //
-      // ask (old-ask-all)
-      //     conf --oldaskconfig
+      // [(new|old)-](def|ask|reask|mconf|qconf|env) [...]
       //
-      //     Update existing configuration (or create new if none exists)
-      //     using old values as default answers.
+      // The optional new|old component controls the reuse of existing
+      // config.kconfig. If new is specified, then the configuration is
+      // created from scratch (with existing config.kconfig, if any, saved as
+      // config.kconfig.old). If old is specified, then the configuration is
+      // created based on existing config.kconfig (with what "based" means
+      // determined by the second component). In this case, it's an error for
+      // there to be no existing config.kconfig. If the new|old component is
+      // omitted, then existing config.kconfig is reused if present (old
+      // semantics) and created from scratch otherwise (new semantics).
       //
-      // old (old-ask-new)
-      //     conf --oldconfig
+      // Given a configuration option definition in the Kconfig file, it's
+      // value can come from the following sources:
       //
-      //     Update existing configuration asking only for newly defined
-      //     options.
+      // 1. Existing config.kconfig.
       //
-      // def (old-def)
-      //     conf --olddefconfig
+      // 2. Default configuration file.
       //
-      //     Update existing configuration setting newly defined options to
-      //     their default values.
+      // 3. Default value from Kconfig.
       //
-      // new-def [<file>]
-      //     conf --alldefconfig | --defconfig <file>
+      // A configuration option that does not have a value in existing
+      // config.kconfig is referred to as a newly-defined configuration
+      // option. Naturally, if config.kconfig does not exist or is not used
+      // (because of the new first component), then all options are
+      // newly-defined.
       //
-      //     Create a new configuration setting all options to values from
-      //     <file> if specified and to their default values otherwise (if
-      //     come options are missing from <file>, they are set to default
-      //     values as well).
+      // The second component determines the configuration method itself and
+      // has the following possible values:
       //
-      // qconf
-      //     qconf
+      // def [<file>]
       //
-      //     Update existing configuration (or create new if none exists)
-      //     with graphical interface using old values as defaults.
+      //     Set newly-defined configuration options to values from <file> if
+      //     specified and to their default values from Kconfig otherwise (if
+      //     some options are missing in <file>, they are set to default
+      //     values as well). To reset all the configuration options, use
+      //     new-def.
+      //
+      // ask [<file>]
+      //
+      //     Ask for values of only newly-defined configuration options. For
+      //     default answers use values from <file> if specified and default
+      //     values from Kconfig otherwise.
+      //
+      //     Note that if config.kconfig does not exist or is not used
+      //     (new-ask) then this method is equivalent to reask.
+      //
+      // reask [<file>]
+      //
+      //     Ask for values of all the configuration options. For default
+      //     answers use values from config.kconfig if exists, from <file> if
+      //     specified, and default values from Kconfig otherwise.
       //
       // mconf
-      //     mconf
       //
-      //     Update existing configuration (or create new if none exists)
-      //     with menu interface using old values as defaults.
+      //     Present all the configuration options in a menu interface. For
+      //     default answers, use values from config.kconfig if exists and
+      //     default values from Kconfig otherwise.
+      //
+      // qconf
+      //
+      //     Present all the configuration options in a graphical interface.
+      //     For default answers, use values from config.kconfig if exists and
+      //     default values from Kconfig otherwise.
       //
       // env <prog> [<args>]
-      //     <prog> <args> Kconfig
       //
       //     Run <prog> in the configuration environment (KCONFIG_CONFIG, etc)
       //     passing the Kconfig definition file as the last argument. For
@@ -352,32 +378,50 @@ namespace build2
       //
       //     config.kconfig="env kconfig-conf --savedefconfig defconfig.kconfig"
       //
-      // @@ Missing plausible methods:
+      // A few notes on the configurator semantics: kconfig-conf --oldconfig
+      // and --oldaskconfig are quite similar in that they both load the
+      // existing configuration if present. The difference is that --oldconfig
+      // only asks for newly-defined options while --oldaskconfig asks for all
+      // options using the existing configuration's values as the default
+      // answers.
       //
-      //    - new-ask        -- drop existing config
+      // The other configurators (mconf, qconf) implement a hybrid of the two
+      // modes in that they also load the existing configuration if any and
+      // then present the configuration tree/menu with this configuration's
+      // values letting the user tweak what they deem necessary.
       //
-      //    - old-def <file> -- take defaults for new values from file (not
-      //                        going to be trivial to implement, maybe as
-      //                        two loads, saving symbols/value in-between).
+      // Mapping for some of the kconfig-conf options to the above methods:
+      //
+      // --oldconfig             ask
+      // --oldaskconfig          reask
+      // --olddefconfig          def
+      // --alldefconfig      new-def
+      // --defconfig <file>  new-def <file>
+      //
+      // Note that the following potentially useful methods have no
+      // kconfig-conf equivalents:
+      //
+      // old-def <file>
+      // [re]ask <file>
       //
       // The kconfig.kconfig.{configure,reconfigure,retryconfigure} variables
       // can be set by the project to select the default method for creating
       // new, updating existing, and trying to fix previously created/updated
-      // configurations, respectively. For example: @@ old-def
+      // configurations, respectively. For example:
       //
-      // kconfig.kconfig.configure = new-def $src_root/build/deconfig.kconfig
-      // kconfig.kconfig.reconfigure = old-def $src_root/build/deconfig.kconfig
+      // kconfig.kconfig.configure = new-def $src_root/build/defconfig.kconfig
+      // kconfig.kconfig.reconfigure = old-def $src_root/build/defconfig.kconfig
       //
-      // The default methods for these variables are `ask`, `old`, and `ask`,
+      // The default methods for these variables are reask, ask, and reask,
       // respectively (see below for rationale).
       //
       // The kconfig.kconfig.transient variable (entered in init()) can be set
       // by the project to select the transient configuration method. If
-      // unspecified, then the `new-def` method is used (all options set to
-      // their default values). Setting the method to `ask` disables the
-      // ability to use transient configurations. For example:
+      // unspecified, then the def method is used (all configuration options
+      // set to their default values). Setting the method to `ask` disables
+      // the ability to use transient configurations. For example:
       //
-      // kconfig.kconfig.transient = new-def $src_root/build/deconfig.kconfig
+      // kconfig.kconfig.transient = def $src_root/build/deconfig.kconfig
       //
       auto& var_c_k   (vp.insert<strings> ("config.kconfig"));
       auto& var_k_k_c (vp.insert<strings> ("kconfig.kconfig.configure"));
@@ -390,7 +434,7 @@ namespace build2
 
       // Note: always transient and only entering during configure.
       //
-      config::unsave_variable (rs, var_c_k); //@@ Does not work (new-def)!
+      config::unsave_variable (rs, var_c_k); //@@ Does not work (try new-def)!
 
       // We have a complication: we need to load the configuration here and
       // now since anything after (remainder of root.build, buildfiles) can
@@ -406,132 +450,159 @@ namespace build2
       // check if there is config.kconfig.new laying around and use that as
       // the starter configuration.
       //
-      // Also a few notes on the configurator semantics: conf's --oldconfig
-      // and --oldaskconfig are quite similar in that they both load the
-      // existing configuration if present. The difference is that --oldconfig
-      // only asks for "new" values (for some definition of "new") while
-      // --oldaskconfig asks for all values using the existing configuration's
-      // values as the default answers.
-      //
-      // The other configurators (mconf, qconf) implement a hybrid of the two
-      // modes in that they also load the existing configuration if any and
-      // then present the configuration tree/menu with this configuration's
-      // values letting the user tweak what they deem necessary.
-      //
       // @@ COMP: will need to aggregate/disaggregate both files?
-
-      path vf (rs.out_path () / rs.root_extra->build_dir / val_file + ".new");
-
-      // If config.kconfig.new already exists, use that. Otherwise, if
-      // config.kconfig exists, rename it to config.kconfig.new.
       //
-      // Note that in the former case we may also have the .new.old file which
-      // we should keep since configurators only create it if there are
-      // changes.
+      path ef (rs.out_path () / rs.root_extra->build_dir / val_file);
+      path vf (ef + ".new");
+
+      // Determine what exists.
       //
-      enum {exist_none, exist_old, exist_new} e (exist_none);
-      if (exists (vf))
-        e = exist_new;
-      else
-      {
-        path f (vf.base ());
-        if (exists (f))
-        {
-          mvfile (f, vf, 2);
-          rmfile (ctx, vf + ".old", 3); // For good measure.
-          e = exist_old;
-        }
-      }
+      enum {exist_none, exist_cur, exist_new} e (
+        exists (vf) ? exist_new :
+        exists (ef) ? exist_cur : exist_none);
 
       // Handle various configuration methods.
+      //
+      // We translate the second component to the configurator program (conf,
+      // mconf, qconf, and env) and its arguments. For methods that are not
+      // supported by conf, we invent some imaginary options/modes which means
+      // that can only be implemented as builtins.
       //
       string conf;
       cstrings args {nullptr};
       string arg_df;
       string arg_cf;
-
-      auto process_method = [&conf, &args, &arg_cf] (const strings& ms,
-                                                     const variable& var)
-      {
-        if (ms.empty ())
-          fail << "configuration method expected in " << var;
-
-        const string& m (ms[0]);
-
-        size_t n (1);
-        if (m == "qconf" ||
-            m == "mconf")
-        {
-          conf = m;
-          args.push_back ("-s");
-        }
-        else if (m == "env")
-        {
-          conf = m;
-          n = ms.size ();
-
-          if (n == 1)
-            fail << "expected program for configuration method env in " << var;
-
-          args[0] = ms[1].c_str ();
-
-          for (size_t i (2); i != n; ++i)
-            args.push_back (ms[i].c_str ());
-        }
-        else
-        {
-          // Note: mode option position must be 2.
-          //
-          conf = "conf";
-          args.push_back ("-s");
-
-          if (m == "ask")
-          {
-            args.push_back ("--oldaskconfig");
-          }
-          else if (m == "old")
-          {
-            args.push_back ("--oldconfig");
-          }
-          else if (m == "def")
-          {
-            args.push_back ("--olddefconfig");
-          }
-          else if (m == "new-def")
-          {
-            if (ms.size () != 1)
-            {
-              args.push_back ("--defconfig");
-              args.push_back ((arg_cf = env_path (ms[1])).c_str ());
-              n = 2;
-            }
-            else
-              args.push_back ("--alldefconfig");
-          }
-          else
-            fail << "unknown configuration method '" << m << "' in " << var;
-        }
-
-        if (ms.size () > n)
-          fail << "unexpected argument '" << ms[n] << "' for method " << m
-               << " in " << var;
-      };
-
       {
         const variable* v (&var_c_k);
-        const strings* m (cast_null<strings> (rs[*v]));
+        lookup l (rs[*v]);
 
-        if (m == nullptr)
+        if (!l)
         {
           v = (e == exist_none ? &var_k_k_c :
-               e == exist_old  ? &var_k_k_r :
+               e == exist_cur  ? &var_k_k_r :
                e == exist_new  ? &var_k_k_y : nullptr);
 
-          m = cast_null<strings> (rs[*v]);
+          l = rs[*v];
         }
 
-        if (m != nullptr)
-          process_method (*m, *v);
+        if (l)
+        {
+          const strings& ms (cast<strings> (l));
+
+          if (ms.empty ())
+            fail << "configuration method expected in " << *v;
+
+          string m (ms[0]);
+
+          // Deal with the prefix.
+          //
+          bool old;
+          if (m.compare (0, 4, "old-") == 0 ||
+              m.compare (0, 4, "new-") == 0)
+          {
+            old = (m[0] == 'o');
+
+            // Reconcile desired old/new with reality.
+            //
+            if (old)
+            {
+              if (e == exist_none)
+                fail << "configuration method " << m << " requested but "
+                     << ef << " does not exist";
+            }
+            else if (e != exist_none)
+            {
+              // Note that we always move it to config.kconfig.new.old to be
+              // aligned with the two-stage process (see configure_post()).
+              //
+              mvfile (e == exist_new ? vf : ef, vf + ".old", 2);
+              e = exist_none;
+            }
+
+            m.erase (0, 4);
+          }
+          else
+            old = (e != exist_none);
+
+          size_t n (1);
+          if (m == "qconf" ||
+              m == "mconf")
+          {
+            conf = m;
+            args.push_back ("-s");
+          }
+          else if (m == "env")
+          {
+            conf = m;
+            n = ms.size ();
+
+            if (n == 1)
+              fail << "expected program for configuration method env in " << *v;
+
+            args[0] = ms[1].c_str ();
+
+            for (size_t i (2); i != n; ++i)
+              args.push_back (ms[i].c_str ());
+          }
+          else
+          {
+            // Note: mode option position must be 2.
+            //
+            conf = "conf";
+            args.push_back ("-s");
+
+            if (m == "def")
+            {
+              if (old)
+              {
+                if (ms.size () != 1)
+                {
+                  //@@ TODO
+                  fail << "configuration method old-def <file> not supported";
+                }
+                else
+                  args.push_back ("--olddefconfig");
+              }
+              else
+              {
+                if (ms.size () != 1)
+                {
+                  args.push_back ("--defconfig");
+                  args.push_back ((arg_cf = env_path (ms[1])).c_str ());
+                  n = 2;
+                }
+                else
+                  args.push_back ("--alldefconfig");
+              }
+            }
+            else if (m == "ask")
+            {
+              if (ms.size () != 1)
+              {
+                //@@ TODO
+                fail << "configuration method ask <file> not supported";
+              }
+              else
+                args.push_back ("--oldconfig");
+            }
+            else if (m == "reask")
+            {
+              if (ms.size () != 1)
+              {
+                //@@ TODO
+                fail << "configuration method reask <file> not supported";
+              }
+              else
+                args.push_back ("--oldaskconfig");
+            }
+            else
+              fail << "unknown configuration method '" << m << "' in " << *v;
+          }
+
+          if (ms.size () > n)
+            fail << "unexpected argument '" << ms[n] << "' for method " << m
+                 << " in " << *v;
+        }
         else
         {
           // What should the default configuration mode be? If it doesn't
@@ -546,12 +617,25 @@ namespace build2
           //
           conf = "conf";
           args.push_back ("-s");
-          args.push_back (e == exist_old ? "--oldconfig" : "--oldaskconfig");
+          args.push_back (e == exist_cur ? "--oldconfig" : "--oldaskconfig");
         }
       }
 
       args.push_back ((arg_df = env_path (df)).c_str ());
       args.push_back (nullptr);
+
+      // If config.kconfig.new already exists, we use that. Otherwise, if
+      // config.kconfig exists, rename it to config.kconfig.new.
+      //
+      // Note that in the former case we may also have the .new.old file which
+      // we should keep since configurators only create it if there are
+      // changes.
+      //
+      if (e == exist_cur)
+      {
+        mvfile (ef, vf, 2);
+        rmfile (ctx, vf + ".old", 3); // For good measure.
+      }
 
       // Handle some conf modes as built-in. The main advantage is that we
       // don't need the presence of the kconfig-conf executable.
@@ -827,6 +911,8 @@ namespace build2
       }
       else
       {
+        // Transient configuration.
+        //
         const strings* ms (cast_null<strings> (rs[var_k_k_t]));
 
         if (ms != nullptr && ms->empty ())
@@ -834,11 +920,11 @@ namespace build2
 
         const string& m (ms != nullptr ? (*ms)[0] : "new-def");
 
-        if (m == "ask")
+        if (m == "ask" || m == "new-ask" || m == "reask" || m == "new-reask")
           fail (l) << vf << " does not exist" <<
             info << "consider configuring " << rs.out_path ();
 
-        if (m != "new-def")
+        if (m != "def" && m != "new-def")
           fail << "unexpected configuration method '" << m << "' in "
                << var_k_k_t;
 
