@@ -11,6 +11,7 @@
 #include <libbuild2/config/utility.hxx>
 
 #include <libbuild2/kconfig/lkc.h>
+#include <libbuild2/kconfig/confapi.h>
 
 using namespace std;
 
@@ -577,23 +578,29 @@ namespace build2
             }
             else if (m == "ask")
             {
+              // If there is no existing configuration, remap it to reask so
+              // that we get better diagnostics from conf (no misleading
+              // "Restart config..."  message).
+              //
+              args.push_back (e == exist_none
+                              ? "--oldaskconfig"
+                              : "--oldconfig");
+
               if (ms.size () != 1)
               {
                 //@@ TODO
                 fail << "configuration method ask <file> not supported";
               }
-              else
-                args.push_back ("--oldconfig");
             }
             else if (m == "reask")
             {
+              args.push_back ("--oldaskconfig");
+
               if (ms.size () != 1)
               {
                 //@@ TODO
                 fail << "configuration method reask <file> not supported";
               }
-              else
-                args.push_back ("--oldaskconfig");
             }
             else
               fail << "unknown configuration method '" << m << "' in " << *v;
@@ -652,7 +659,9 @@ namespace build2
       string mode;
       if (conf == "conf" && ((mode = args[2]) == "--defconfig"    ||
                              (mode          ) == "--olddefconfig" ||
-                             (mode          ) == "--alldefconfig"))
+                             (mode          ) == "--alldefconfig" ||
+                             (mode          ) == "--oldaskconfig" ||
+                             (mode          ) == "--oldconfig"))
       {
         args[0] = "kconfig-conf";
         string arg_vf (env_path (vf));
@@ -676,6 +685,14 @@ namespace build2
 
         conf_parse (arg_df.c_str ());
 
+        // Load the existing configuration for --old* modes.
+        //
+        if (e != exist_none && mode.compare (0, 5, "--old") == 0)
+        {
+          if (conf_read (arg_vf.c_str ()) != 0)
+            fail (l) << "unable to load " << vf;
+        }
+
         if (mode == "--defconfig")
         {
           const char* f (args[3]); // Already env_path'ed.
@@ -687,9 +704,6 @@ namespace build2
         }
         else if (mode == "--olddefconfig")
         {
-          if (conf_read (arg_vf.c_str ()) != 0)
-            fail (l) << "unable to load " << vf;
-
           // @@ This call is missing in conf.c for some reason!
           //
           conf_set_all_new_symbols (def_default);
@@ -698,6 +712,16 @@ namespace build2
         {
           conf_set_all_new_symbols (def_default);
         }
+        else if (mode == "--oldaskconfig")
+        {
+          conf_reask ();
+        }
+        else if (mode == "--oldconfig")
+        {
+          conf_ask ();
+        }
+        else
+          assert (false);
 
         if (conf_write (arg_vf.c_str ()) != 0)
           fail (l) << "unable to save " << vf;

@@ -12,11 +12,15 @@ y{*}: extension = y
 define l: file
 l{*}: extension = l
 
+getopt = ($c.target.class == 'windows' && $c.target.system != 'mingw32')
+
 lib{build2-kconfig}: {hxx ixx txx cxx}{**} $imp_libs $int_libs
 
-lib{build2-kconfig}: {h c}{* -parser.tab... -lexer.lex... -menu} \
+lib{build2-kconfig}: {h c}{* -parser.tab... -lexer.lex... -menu -conf} \
                      {h c}{parser.tab...} c{lexer.lex...}
 lib{build2-kconfig}: c{menu}: include = adhoc # Included by parser.y.
+lib{build2-kconfig}: c{conf}: include = adhoc # Included by confapi.c.
+lib{build2-kconfig}: getopt/h{getopt}: include = $getopt
 
 if ($flex != [null] && $bison != [null])
 {
@@ -56,6 +60,9 @@ if ($flex != [null] && $bison != [null])
 # Build options.
 #
 cc.poptions =+ "-I$out_root" "-I$src_root" "-I$src_base"
+
+if $getopt
+  c.poptions =+ "-I($src_base/getopt)"
 
 # Disable autoconfig support.
 #
