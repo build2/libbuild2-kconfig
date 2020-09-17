@@ -455,6 +455,7 @@ namespace build2
       //
       path ef (rs.out_path () / rs.root_extra->build_dir / val_file);
       path vf (ef + ".new");
+      path cf; // Default configuration file.
 
       // Determine what exists.
       //
@@ -466,14 +467,29 @@ namespace build2
       //
       // We translate the second component to the configurator program (conf,
       // mconf, qconf, and env) and its arguments. For methods that are not
-      // supported by conf, we invent some imaginary options/modes which means
-      // that can only be implemented as builtins.
+      // supported by conf, we invent some imaginary mode arguments which
+      // means that they can only be implemented as builtins.
       //
       string conf;
       cstrings args {nullptr};
       string arg_df;
       string arg_cf;
       {
+        auto set_cf = [&cf, &arg_cf] (const string& f) -> const char*
+        {
+          try
+          {
+            cf = path (f);
+          }
+          catch (const invalid_path& e)
+          {
+            fail << "invalid path '" << e.path << "'" << endf;
+          }
+
+          arg_cf = env_path (cf);
+          return arg_cf.c_str ();
+        };
+
         const variable* v (&var_c_k);
         lookup l (rs[*v]);
 
@@ -556,50 +572,40 @@ namespace build2
             {
               if (old)
               {
+                args.push_back ("--olddefconfig");
+
                 if (ms.size () != 1)
                 {
-                  //@@ TODO
-                  fail << "configuration method old-def <file> not supported";
+                  args.push_back (set_cf (ms[1]));
+                  n = 2;
                 }
-                else
-                  args.push_back ("--olddefconfig");
               }
               else
               {
                 if (ms.size () != 1)
                 {
                   args.push_back ("--defconfig");
-                  args.push_back ((arg_cf = env_path (ms[1])).c_str ());
+                  args.push_back (set_cf (ms[1]));
                   n = 2;
                 }
                 else
                   args.push_back ("--alldefconfig");
               }
             }
-            else if (m == "ask")
+            else if (m == "ask" || m == "reask")
             {
               // If there is no existing configuration, remap it to reask so
               // that we get better diagnostics from conf (no misleading
               // "Restart config..."  message).
               //
-              args.push_back (e == exist_none
+              args.push_back (m[0] == 'r' || e == exist_none
                               ? "--oldaskconfig"
                               : "--oldconfig");
 
               if (ms.size () != 1)
               {
-                //@@ TODO
-                fail << "configuration method ask <file> not supported";
-              }
-            }
-            else if (m == "reask")
-            {
-              args.push_back ("--oldaskconfig");
-
-              if (ms.size () != 1)
-              {
-                //@@ TODO
-                fail << "configuration method reask <file> not supported";
+                args.push_back (set_cf (ms[1]));
+                n = 2;
               }
             }
             else
@@ -687,18 +693,172 @@ namespace build2
 
         // Load the existing configuration for --old* modes.
         //
-        if (e != exist_none && mode.compare (0, 5, "--old") == 0)
+        if (mode.compare (0, 5, "--old") == 0)
         {
-          if (conf_read (arg_vf.c_str ()) != 0)
-            fail (l) << "unable to load " << vf;
+          // See if we have the default configuration file.
+          //
+          if (args.size () != 6)
+          {
+            if (e != exist_none && conf_read (arg_vf.c_str ()) != 0)
+              fail (l) << "unable to load " << vf;
+          }
+          else
+          {
+            // There is no equivalent functionality in kconfig-conf so we have
+            // to assemble something together ourselves.
+            //
+            auto sym_move_val = [] (symbol* s, int src, int dst)
+            {
+              switch (s->type)
+              {
+              case S_INT:
+              case S_HEX:
+              case S_STRING:
+                s->def[dst].val = s->def[src].val;
+                s->def[src].val = nullptr;
+                // Fall through.
+              case S_BOOLEAN:
+              case S_TRISTATE:
+                s->def[dst].tri = s->def[src].tri;
+                break;
+              case S_UNKNOWN:
+                assert (false);
+              }
+
+              s->flags &= ~(SYMBOL_DEF << src);
+              s->flags |=  (SYMBOL_DEF << dst);
+            };
+
+            // First load the default configuration file.
+            //
+            // While it feels like S_DEF_DEF3/4 are there for exactly this
+            // kind of thing, there are subtle differences in semantics of
+            // conf_read_simple() that we'd rather not mess with. So instead
+            // we are going to load it as S_DEF_USER (which is how, say,
+            // --defconfig does it) and then manually move the values to
+            // S_DEF_DEF3.
+            //
+            sym_set_change_count (0);
+
+            assert (args[3] == arg_cf.c_str ());
+            if (conf_read_simple (args[3], S_DEF_USER) != 0)
+              fail (l) << "unable to load " << cf;
+
+            // Omit moving things back and forth if there is not current
+            // configuration. Essentially, this becomes a conf_read() call.
+            //
+            if (e != exist_none)
+            {
+              size_t i;
+              symbol* s;
+              for_all_symbols (i, s)
+              {
+                if ((s->flags & SYMBOL_DEF_USER) == 0 || s->type == S_UNKNOWN)
+                  continue;
+
+                sym_move_val (s, S_DEF_USER, S_DEF_DEF3);
+              }
+
+              // Next load the current configuration file.
+              //
+              // Note that we don't want any changes in the default file to
+              // count so we reset the counter.
+              //
+              sym_set_change_count (0);
+
+              if (conf_read_simple (arg_vf.c_str (), S_DEF_USER) != 0)
+                fail (l) << "unable to load " << vf;
+
+              // Now go over all the symbols and move S_DEF_DEF3 values to
+              // S_DEF_USER for symbols that don't already have S_DEF_USER.
+              //
+              for_all_symbols (i, s)
+              {
+                if ((s->flags & SYMBOL_DEF3) == 0)
+                  continue;
+
+                // Choices are tricky (see conf_read_simple() for some
+                // meditation material). Specifically, what is stored in the
+                // config file is the selected choice arm (along with
+                // commented out non-selected arms). So we should only
+                // propagate the selection from the default file if the choice
+                // hasn't been selected by any arm from the currect file.
+                // conf_read_simple() doesn't mark the choice symbol as
+                // "selected" so to be safe we will only propagate our value
+                // if none of its other arms have been mentioned in the
+                // current file with yes or mod.
+                //
+                // Note that from studying conf_write() it appears that choice
+                // symbols themselves are never written. They are also marked
+                // with SYMBOL_DEF* by conf_read_simple().
+                //
+                if (sym_is_choice (s))
+                  continue;
+                else if (sym_is_choice_value (s))
+                {
+                  auto sym_choice = [] (symbol* cv)
+                  {
+                    return prop_get_symbol (sym_get_choice_prop (cv));
+                  };
+
+                  symbol* cs (sym_choice (s));
+
+                  // First see if there is any mentioning of this choice's
+                  // arms in S_DEF_USER.
+                  //
+                  size_t i1;
+                  symbol* s1;
+                  for_all_symbols (i1, s1)
+                  {
+                    if ((s1->flags & SYMBOL_DEF_USER) != 0 &&
+                        sym_is_choice_value (s1)           &&
+                        sym_choice (s1) == cs              &&
+                        s1->def[S_DEF_USER].tri != no)
+                    {
+                      cs = nullptr;
+                      break;
+                    }
+                  }
+
+                  if (cs == nullptr)
+                    continue;
+
+                  // Move values of this choice and the choice itself all at
+                  // once (so we don't confuse partially moved with current
+                  // choice symbols). Note that the choice itself may not be
+                  // marked with SYMBOL_DEF3 (see conf_read_simple()).
+                  //
+                  for_all_symbols (i1, s1)
+                  {
+                    if ((s1->flags & SYMBOL_DEF3) != 0 &&
+                        sym_is_choice_value (s1)       &&
+                        sym_choice (s1) == cs)
+                      sym_move_val (s1, S_DEF_DEF3, S_DEF_USER);
+                  }
+
+                  sym_move_val (cs, S_DEF_DEF3, S_DEF_USER);
+                }
+                else
+                {
+                  if ((s->flags & SYMBOL_DEF_USER) != 0)
+                    continue;
+
+                  sym_move_val (s, S_DEF_DEF3, S_DEF_USER);
+                }
+              }
+            }
+
+            // Finally execute the tail of conf_read() to process the values.
+            //
+            conf_read ("");
+          }
         }
 
         if (mode == "--defconfig")
         {
-          const char* f (args[3]); // Already env_path'ed.
-
-          if (conf_read (f) != 0)
-            fail (l) << "unable to load " << f;
+          assert (args[3] == arg_cf.c_str ());
+          if (conf_read (args[3]) != 0)
+            fail (l) << "unable to load " << cf;
 
           conf_set_all_new_symbols (def_default);
         }
