@@ -734,10 +734,14 @@ namespace build2
 
         // Resolve the configurator program.
         //
+        process_path pp;
         process_env env;
 
         if (conf == "env")
-          env = process_env (run_search (args[0]), evars);
+        {
+          pp = run_search (args[0]);
+          env = process_env (pp, evars);
+        }
         else
         {
           //@@ Before importing and running the configurator (for some modes),
