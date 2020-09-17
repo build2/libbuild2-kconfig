@@ -424,6 +424,10 @@ namespace build2
       //
       // kconfig.kconfig.transient = def $src_root/build/deconfig.kconfig
       //
+      // @@ TODO: adhoc value for kconfig.kconfig.transient to allow ad hoc
+      //    transient configuration (e.g., set manually in root.build). Set
+      //    kconfig=[null] as an indication?
+      //
       auto& var_c_k   (vp.insert<strings> ("config.kconfig"));
       auto& var_k_k_c (vp.insert<strings> ("kconfig.kconfig.configure"));
       auto& var_k_k_r (vp.insert<strings> ("kconfig.kconfig.reconfigure"));
