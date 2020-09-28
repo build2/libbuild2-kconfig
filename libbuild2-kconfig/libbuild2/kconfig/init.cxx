@@ -33,7 +33,7 @@ namespace build2
     //
     // Note also that for dir_path we return string, not representation (so no
     // trailing slash). It probably won't be helpful to include the slash
-    // given the macro expansion semantics of Kconfig.
+    // given the primitive macro expansion semantics of Kconfig.
     //
     //
 #ifndef _WIN32
@@ -414,7 +414,9 @@ namespace build2
       // kconfig.kconfig.reconfigure = old-def $src_root/build/defconfig.kconfig
       //
       // The default methods for these variables are reask, ask, and reask,
-      // respectively (see below for rationale).
+      // respectively (see below for rationale). @@ Hm, maybe these should
+      // instead default to def ask, and def to make such project usable in
+      // automated builds, as packages, etc.
       //
       // The kconfig.kconfig.transient variable (entered in init()) can be set
       // by the project to select the transient configuration method. If
