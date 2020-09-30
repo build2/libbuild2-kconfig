@@ -134,16 +134,44 @@ namespace build2
       return storage;
     }
 
+    // @@ TODO: maybe this should be customizable (kconfig.kconfig.title?)
+    //
+    static string
+    env_title (const scope& rs)
+    {
+      string r;
+
+      const project_name& prj (project (rs));
+      if (!prj.empty ())
+      {
+        r = prj.string ();
+
+        if (const string* ver = cast_null<string> (rs[rs.ctx.var_version]))
+        {
+          r += ' ';
+          r += *ver;
+        }
+      }
+
+      return r;
+    }
+
     struct env_data
     {
       const scope& rs;
       const location& loc;
       small_vector<string, 16> evars;
+      optional<string> title;
 #ifdef _WIN32
       optional<string> src_root;
 #endif
+
+      env_data (const scope& s, const location& l) : rs (s), loc (l) {}
     };
 
+    // @@ TODO: we cannot throw from this function. Return fail status in
+    //          env_data?
+    //
     extern "C" char*
     build2_kconfig_getenv (const char* name, void* vd)
     {
@@ -152,7 +180,14 @@ namespace build2
 
       optional<const char*> r;
 
-      if (strcmp (name, "SRC_ROOT") == 0)
+      if (strcmp (name, SRCTREE) == 0                 ||
+          strcmp (name, "CONFIG_") == 0               ||
+          strcmp (name, "ZCONF_DEBUG") == 0           ||
+          strcmp (name, "KCONFIG_OVERWRITECONFIG") == 0)
+      {
+        r = nullptr;
+      }
+      else if (strcmp (name, "SRC_ROOT") == 0)
       {
 #ifndef _WIN32
         r = env_path (rs.src_path ()).c_str ();
@@ -162,6 +197,13 @@ namespace build2
 
         r = d.src_root->c_str ();
 #endif
+      }
+      else if (strcmp (name, "KCONFIG_MAINMENU") == 0)
+      {
+        if (!d.title)
+          d.title = env_title (rs);
+
+        r = d.title->c_str ();
       }
       else
       {
@@ -239,28 +281,16 @@ namespace build2
       context& ctx (rs.ctx);
       auto& vp (ctx.var_pool);
 
-      // @@ TODO: maybe this should be customizable (kconfig.kconfig.title?)
-      //
-      string title;
-      const project_name& prj (project (rs));
-      if (!prj.empty ())
-      {
-        title = prj.string ();
-
-        if (const string* ver = cast_null<string> (rs[ctx.var_version]))
-        {
-          title += ' ';
-          title += *ver;
-        }
-      }
-
       strings evars;
 
       evars.push_back ("KCONFIG_CONFIG=" + env_path (vf));
       evars.push_back ("SRC_ROOT=" + env_path (rs.src_path ()));
 
-      if (!title.empty ())
-        evars.push_back ("KCONFIG_MAINMENU=" + title);
+      {
+        string t (env_title (rs));
+        if (!t.empty ())
+          evars.push_back ("KCONFIG_MAINMENU=" + t);
+      }
 
       // Add Kconfig.* variables if any.
       //
@@ -697,7 +727,7 @@ namespace build2
 
         conf_set_message_callback (nullptr);
 
-        env_data edata {rs, l, {}};
+        env_data edata (rs, l);
         conf_set_getenv_callback (&build2_kconfig_getenv, &edata);
 
         conf_parse (arg_df.c_str ());
@@ -1087,7 +1117,7 @@ namespace build2
 
       // Resolve getenv() calls as Kconfig.* lookups.
       //
-      env_data edata {rs, l, {}};
+      env_data edata (rs, l);
       conf_set_getenv_callback (&build2_kconfig_getenv, &edata);
 
       // Load the configuration definition (Kconfig).
@@ -1351,7 +1381,7 @@ namespace build2
       // KCONFIG_MAINMENU        (always reset)
       try
       {
-        unsetenv ("srctree");
+        unsetenv (SRCTREE);
         unsetenv ("CONFIG_");
         unsetenv ("KCONFIG_AUTOCONFIG");
         // unsetenv ("KCONFIG_AUTOHEADER"); // Disabled by KCONFIG_AUTOCONFIG.
