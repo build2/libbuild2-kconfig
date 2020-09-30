@@ -13,6 +13,7 @@ test.options += --serial-stop --silent --buildfile -
   EOI
 
 +cat <<EOI >=root.build
+  kconfig.kconfig.transient = new-def
   EOI
 
 +cat <<EOI >=Kconfig
@@ -76,7 +77,7 @@ $* configure config.kconfig="old-def defconfig.kconfig" <'./:' &build/config.bui
 cat build/config.kconfig >>EOO
   #
   # Automatically generated file; DO NOT EDIT.
-  # Main menu
+  # basics
   #
   # CONFIG_FOO is not set
   # CONFIG_BAR is not set
