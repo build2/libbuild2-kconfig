@@ -166,12 +166,13 @@ namespace build2
       optional<string> src_root;
 #endif
 
+      // We cannot throw from an extern "C" function so we return fail status.
+      //
+      bool failed = false;
+
       env_data (const scope& s, const location& l) : rs (s), loc (l) {}
     };
 
-    // @@ TODO: we cannot throw from this function. Return fail status in
-    //          env_data?
-    //
     extern "C" char*
     build2_kconfig_getenv (const char* name, void* vd)
     {
@@ -236,17 +237,24 @@ namespace build2
               r = nullptr;
             else
             {
-              string s;
-              const string& v (env_convert (rs, *var, *l, s));
-
-              if (&v != &s)
-                r = v.c_str ();
-              else
+              try
               {
-                s.insert (0, 1, '=');
-                s.insert (0, name, n);
-                vs.push_back (move (s));
-                r = vs.back ().c_str () + n + 1;
+                string s;
+                const string& v (env_convert (rs, *var, *l, s));
+                if (&v != &s)
+                  r = v.c_str ();
+                else
+                {
+                  s.insert (0, 1, '=');
+                  s.insert (0, name, n);
+                  vs.push_back (move (s));
+                  r = vs.back ().c_str () + n + 1;
+                }
+              }
+              catch (const failed&)
+              {
+                r = nullptr;
+                d.failed = true;
               }
             }
           }
@@ -263,9 +271,12 @@ namespace build2
         // FOO will be looked up even if BAR is false. So let's see how it
         // goes, we may have to change this.
         //
-        fail << "undefined Kconfig variable " << name <<
+        error << "undefined Kconfig variable " << name <<
           info (d.loc) << "consider setting Kconfig." << name << " variable "
-             << "before loading kconfig module";
+              << "before loading kconfig module";
+
+        r = nullptr;
+        d.failed = true;
       }
 
       return const_cast<char*> (*r);
@@ -731,6 +742,8 @@ namespace build2
         conf_set_getenv_callback (&build2_kconfig_getenv, &edata);
 
         conf_parse (arg_df.c_str ());
+        if (edata.failed)
+          throw failed ();
 
         // Load the existing configuration for --old* modes.
         //
@@ -926,6 +939,13 @@ namespace build2
 
         if (conf_write (arg_vf.c_str ()) != 0)
           fail (l) << "unable to save " << vf;
+
+        // While we shouldn't throw for any variable that conf_write() might
+        // query, let's check for good measure (e.g., if it queries something
+        // new).
+        //
+        if (edata.failed)
+          throw failed ();
       }
       else
       {
@@ -1123,6 +1143,8 @@ namespace build2
       // Load the configuration definition (Kconfig).
       //
       conf_parse (env_path (df).c_str ());
+      if (edata.failed)
+        throw failed ();
 
       // Load the configuration values.
       //
