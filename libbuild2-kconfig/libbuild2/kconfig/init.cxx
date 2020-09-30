@@ -419,12 +419,17 @@ namespace build2
       // automated builds, as packages, etc.
       //
       // The kconfig.kconfig.transient variable (entered in init()) can be set
-      // by the project to select the transient configuration method. If
-      // unspecified, then the def method is used (all configuration options
-      // set to their default values). Setting the method to `ask` disables
-      // the ability to use transient configurations. For example:
+      // by the project to select the transient configuration method. Setting
+      // it to ask (which is also the default), disables the ability to use
+      // transient configurations. For example:
       //
       // kconfig.kconfig.transient = def $src_root/build/deconfig.kconfig
+      //
+      // Note: there are two plausible defaults for theses four variables:
+      // reask/ask/reask/ask and new-def/old-def/reask/def. We've settled on
+      // the first one to make the decision to use the default values
+      // explicit. It's also more consistent with kconfig-conf which does
+      // reask by default (i.e., if none of the mode options is specified).
       //
       // @@ TODO: adhoc value for kconfig.kconfig.transient to allow ad hoc
       //    transient configuration (e.g., set manually in root.build). Set
@@ -1112,7 +1117,7 @@ namespace build2
         if (ms != nullptr && ms->empty ())
           fail << "configuration method expected in " << var_k_k_t;
 
-        const string& m (ms != nullptr ? (*ms)[0] : "new-def");
+        const string& m (ms != nullptr ? (*ms)[0] : "ask");
 
         if (m == "ask" || m == "new-ask" || m == "reask" || m == "new-reask")
           fail (l) << vf << " does not exist" <<
