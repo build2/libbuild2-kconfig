@@ -134,8 +134,6 @@ namespace build2
       return storage;
     }
 
-    // @@ TODO: maybe this should be customizable (kconfig.kconfig.title?)
-    //
     static string
     env_title (const scope& rs)
     {
@@ -170,7 +168,12 @@ namespace build2
       //
       bool failed = false;
 
-      env_data (const scope& s, const location& l) : rs (s), loc (l) {}
+      env_data (const scope& s, const location& l, const string* t)
+          : rs (s), loc (l)
+      {
+        if (t != nullptr)
+          title = *t;
+      }
     };
 
     extern "C" char*
@@ -287,7 +290,10 @@ namespace build2
     // Note: KCONFIG_CONFIG is expected to be first.
     //
     static strings
-    env_init (const scope& rs, const path& vf, const variable& var_K)
+    env_init (const scope& rs,
+              const path& vf,
+              const variable& var_K,
+              const variable& var_k_k_t)
     {
       context& ctx (rs.ctx);
       auto& vp (ctx.var_pool);
@@ -298,7 +304,13 @@ namespace build2
       evars.push_back ("SRC_ROOT=" + env_path (rs.src_path ()));
 
       {
-        string t (env_title (rs));
+        string t;
+
+        if (const string* v = cast_null<string> (rs[var_k_k_t]))
+          t = *v;
+        else
+          t = env_title (rs);
+
         if (!t.empty ())
           evars.push_back ("KCONFIG_MAINMENU=" + t);
       }
@@ -338,7 +350,9 @@ namespace build2
     }
 
     static path
-    configure (scope& rs, const location& l, const path& df)
+    configure (scope& rs, const location& l,
+               const path& df,
+               const variable& var_k_k_t)
     {
       context& ctx (rs.ctx);
 
@@ -738,7 +752,7 @@ namespace build2
 
         conf_set_message_callback (nullptr);
 
-        env_data edata (rs, l);
+        env_data edata (rs, l, cast_null<string> (rs[var_k_k_t]));
         conf_set_getenv_callback (&build2_kconfig_getenv, &edata);
 
         conf_parse (arg_df.c_str ());
@@ -951,7 +965,7 @@ namespace build2
       {
         // Prepare the environment.
         //
-        strings evars (env_init (rs, vf, var_K));
+        strings evars (env_init (rs, vf, var_K, var_k_k_t));
 
         // Resolve the configurator program.
         //
@@ -1112,9 +1126,13 @@ namespace build2
       context& ctx (rs.ctx);
       auto& vp (rs.var_pool ());
 
+      // Custom main menu title ("<project> <version>" by default).
+      //
+      auto& var_k_k_t (vp.insert<string> ("kconfig.kconfig.title"));
+
       // See configure().
       //
-      auto& var_k_k_t (vp.insert<strings> ("kconfig.kconfig.transient"));
+      auto& var_k_k_tr (vp.insert<strings> ("kconfig.kconfig.transient"));
 
       path df (rs.src_path () / rs.root_extra->build_dir / def_file);
 
@@ -1124,7 +1142,7 @@ namespace build2
       // (Re)configure if we are configuring.
       //
       path vf (ctx.current_mif->id == configure_id
-               ? configure (rs, l, df)
+               ? configure (rs, l, df, var_k_k_t)
                : rs.out_path () / rs.root_extra->build_dir / val_file);
 
       // Note: similar code in configure() above.
@@ -1137,7 +1155,7 @@ namespace build2
 
       // Resolve getenv() calls as Kconfig.* lookups.
       //
-      env_data edata (rs, l);
+      env_data edata (rs, l, cast_null<string> (rs[var_k_k_t]));
       conf_set_getenv_callback (&build2_kconfig_getenv, &edata);
 
       // Load the configuration definition (Kconfig).
@@ -1164,10 +1182,10 @@ namespace build2
       {
         // Transient configuration.
         //
-        const strings* ms (cast_null<strings> (rs[var_k_k_t]));
+        const strings* ms (cast_null<strings> (rs[var_k_k_tr]));
 
         if (ms != nullptr && ms->empty ())
-          fail << "configuration method expected in " << var_k_k_t;
+          fail << "configuration method expected in " << var_k_k_tr;
 
         const string& m (ms != nullptr ? (*ms)[0] : "ask");
 
@@ -1177,7 +1195,7 @@ namespace build2
 
         if (m != "def" && m != "new-def")
           fail << "unexpected configuration method '" << m << "' in "
-               << var_k_k_t;
+               << var_k_k_tr;
 
         switch (ms != nullptr ? ms->size () : 1)
         {
@@ -1210,7 +1228,7 @@ namespace build2
         default:
           {
             fail << "unexpected argument '" << (*ms)[2] << "' for method "
-                 << m << " in " << var_k_k_t;
+                 << m << " in " << var_k_k_tr;
           }
         }
       }
