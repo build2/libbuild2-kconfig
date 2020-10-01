@@ -35,9 +35,9 @@ test.options += --serial-stop --silent --buildfile -
 mkdir build;
 ln -s ../../bootstrap.build ../../root.build ../../Kconfig build/;
 $* noop <<EOI >>EOO
-  print $kconfig.foo
-  print $kconfig.bar
-  print $kconfig.baz
+  print $kconfig.basics.foo
+  print $kconfig.basics.bar
+  print $kconfig.basics.baz
   EOI
   true
   false
@@ -93,9 +93,9 @@ cat <<EOI >=build/Kconfig;
   source "$(SRC_ROOT)/Kconfig"
   EOI
 $* noop <<EOI >>EOO
-  print $kconfig.foo
-  print $kconfig.bar
-  print $kconfig.baz
+  print $kconfig.basics.foo
+  print $kconfig.basics.bar
+  print $kconfig.basics.baz
   EOI
   true
   false

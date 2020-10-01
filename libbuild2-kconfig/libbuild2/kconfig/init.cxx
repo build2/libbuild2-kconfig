@@ -1236,6 +1236,18 @@ namespace build2
       // Set Kconfig symbols as kconfig.* variables.
       //
       {
+        // If this is a named project, we qualify kconfig.* variables with the
+        // project and make them global. This qualification has the following
+        // benefits:
+        //
+        // - Consistent with config.*-based project qualification.
+        // - Can be overridden on the command line.
+        // - Can be used in subprojects.
+        //
+        const project_name& prj (project (rs));
+        bool var_q (!prj.empty ());
+        string var_p (var_q ? prj.variable () + '.' : string ());
+
         // If requested, calculate symbol values, similar to conf_read().
         //
         if (calc)
@@ -1259,9 +1271,8 @@ namespace build2
 
           // Process the name.
           //
-          bool var_q (false);
-          string var_n (string ("kconfig.") + s->name);
-          lcase (var_n);
+          string var_n ("kconfig." + var_p + s->name);
+          lcase (var_n, var_p.size () + 8);
 
           // Enter variable.
           //
