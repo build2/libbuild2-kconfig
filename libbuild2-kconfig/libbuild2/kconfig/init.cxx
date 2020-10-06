@@ -78,6 +78,9 @@ namespace build2
     // This is fairly performance-sensitive so we try to optimize things a
     // bit.
     //
+    static const string ktrue ("y");
+    static const string kfalse ("n");
+
     static const string&
     env_convert (const scope& rs,
                  const variable& var, const value& val,
@@ -95,6 +98,10 @@ namespace build2
             return ns[0].value;
 
           storage = convert<string> (val);
+        }
+        else if (val.type->is_a<bool> ())
+        {
+          return val.as<bool> () ? ktrue : kfalse;
         }
         else if (val.type->is_a<string> ())
         {
@@ -388,8 +395,8 @@ namespace build2
       // (because of the new first component), then all options are
       // newly-defined.
       //
-      // The second component determines the configuration method itself and
-      // has the following possible values:
+      // The second component determines the configurator and its mode and has
+      // the following possible values:
       //
       // def [<file>]
       //
@@ -469,9 +476,7 @@ namespace build2
       // kconfig.kconfig.reconfigure = old-def $src_root/build/defconfig.kconfig
       //
       // The default methods for these variables are reask, ask, and reask,
-      // respectively (see below for rationale). @@ Hm, maybe these should
-      // instead default to def ask, and def to make such project usable in
-      // automated builds, as packages, etc.
+      // respectively (see below for rationale).
       //
       // The kconfig.kconfig.transient variable (entered in init()) can be set
       // by the project to select the transient configuration method. Setting
