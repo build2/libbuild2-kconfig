@@ -8,6 +8,7 @@
 #include <libbuild2/filesystem.hxx>
 #include <libbuild2/diagnostics.hxx>
 
+#include <libbuild2/dist/module.hxx>
 #include <libbuild2/config/utility.hxx>
 
 #include <libbuild2/kconfig/lkc.h>
@@ -1131,6 +1132,9 @@ namespace build2
       context& ctx (rs.ctx);
       auto& vp (rs.var_pool ());
 
+      const dir_path& src_root (rs.src_path ());
+      const dir_path& out_root (rs.out_path ());
+
       // Custom main menu title ("<project> <version>" by default).
       //
       auto& var_k_k_t (vp.insert<string> ("kconfig.kconfig.title"));
@@ -1139,7 +1143,7 @@ namespace build2
       //
       auto& var_k_k_tr (vp.insert<strings> ("kconfig.kconfig.transient"));
 
-      path df (rs.src_path () / rs.root_extra->build_dir / def_file);
+      path df (src_root / rs.root_extra->build_dir / def_file);
 
       if (!exists (df))
         fail (l) << df << " does not exist";
@@ -1148,7 +1152,7 @@ namespace build2
       //
       path vf (ctx.current_mif->id == configure_id
                ? configure (rs, l, df, var_k_k_t)
-               : rs.out_path () / rs.root_extra->build_dir / val_file);
+               : out_root / rs.root_extra->build_dir / val_file);
 
       // Note: similar code in configure() above.
       //
@@ -1196,7 +1200,7 @@ namespace build2
 
         if (m == "ask" || m == "new-ask" || m == "reask" || m == "new-reask")
           fail (l) << vf << " does not exist" <<
-            info << "consider configuring " << rs.out_path ();
+            info << "consider configuring " << out_root;
 
         if (m != "def" && m != "new-def")
           fail << "unexpected configuration method '" << m << "' in "
@@ -1404,6 +1408,42 @@ namespace build2
           case S_UNKNOWN:
             assert (false);
           }
+        }
+      }
+
+      // Make sure Kconfig-related files are part of the distribution. But
+      // let's not waste time if we are not distributing.
+      //
+      if (ctx.current_mif->id == dist_id)
+      {
+        if (auto* m = rs.find_module<dist::module> (dist::module::name))
+        {
+          // Top-level Kconfig as well as all the files it sourced.
+          //
+          for (const ::file* f (file_list); f != nullptr; f = f->next)
+          {
+            try
+            {
+              path p (f->name);
+              p.normalize (); // Get rid of `..`, etc.
+
+              if (p.relative ())
+                fail << "relative Kconfig path: " << p.string ();
+
+              if (!p.sub (src_root))
+                fail << "Kconfig path out of source root: " << p.string ();
+
+              m->add_adhoc (p.leaf (src_root));
+            }
+            catch (const invalid_path&)
+            {
+              fail << "invalid Kconfig path '" << f->name << "'";
+            }
+          }
+
+          // Conventionally-named default configuration files.
+          //
+          m->add_adhoc (rs.root_extra->build_dir / "defconfig*.kconfig");
         }
       }
 
