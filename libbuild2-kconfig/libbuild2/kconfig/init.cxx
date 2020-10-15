@@ -1323,8 +1323,8 @@ namespace build2
             }
           case S_TRISTATE:
             {
-              val = names {name (v.tri == no  ? "false" :
-                                 v.tri == mod ? "module" : "true")};
+              val = names {name (v.tri == yes ? "true" :
+                                 v.tri == mod ? "module" : "false")};
               break;
             }
           case S_INT:
@@ -1338,7 +1338,10 @@ namespace build2
               //
               // See kconfig-dump for details on the NULL semantics.
               //
-              // @@ Why doesn't null apply to bool and tristate?
+              // The NULL semantics is in effect when the option is disabled
+              // because one of its dependencies is not satisfied (note that
+              // this does not apply to bool and tristate because they are set
+              // to false if disabled).
               //
               bool null (!(s->flags & SYMBOL_WRITE) &&
                          !(s->flags & SYMBOL_NO_WRITE));
