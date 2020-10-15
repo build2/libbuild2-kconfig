@@ -1,0 +1,67 @@
+define cli: file
+cli{*}: extension = cli
+
+# Note that the .css files are embedded into the generated .xhtml so we treat
+# them as file{} rather than doc{}.
+#
+define css: file
+css{*}: extension = css
+
+define xhtml: doc
+xhtml{*}: extension = xhtml
+
+import? [metadata] cli = cli%exe{cli}
+
+# Note that we include all the generated files into the distribution and don't
+# remove them when cleaning in src (so that clean results in a state identical
+# to distributed).
+
+# Generate the manual if the cli program is available and handle (install,
+# distribute, etc) the pre-generated files otherwise, if present.
+#
+if ($cli != [null])
+{
+  ./: xhtml{build2-kconfig-manual}
+
+  xhtml{build2-kconfig-manual}: cli{manual} ../file{COPYRIGHT}          \
+                                xhtml{doc-prologue doc-epilogue} css{*} \
+                                $cli
+  {
+    dist  = true
+    clean = ($src_root != $out_root)
+    backlink = true
+  }
+  {{
+    diag cli $> : ($<[0]) # @@ TMP: revise
+
+    # Note that the date change doesn't change the script semantics, thus the
+    # variable is defined locally.
+    #
+    date +"%B %Y" | set date
+
+    sed -n -e 's/^Copyright \(c\) (.+ the build2 authors).*/\1/p' $path($<[1]) | \
+      set copyright
+
+    # Note that --html-suffix is used for man links.
+    #
+    $cli --generate-html                           \
+         -v date="$date"                           \
+         -v version="$version.project_id"          \
+         -v series="$version.major.$version.minor" \
+         -v copyright="$copyright"                 \
+         -v license=GPLv2                          \
+         --link-regex '%bdep([-.].+)%https://build2.org/bdep/doc/bdep$1%' \
+         --link-regex '%b(#.+)?%https://build2.org/build2/doc/build2-build-system-manual.xhtml$1%' \
+         --html-suffix .xhtml                      \
+         --html-prologue-file $path($<[2])         \
+         --html-epilogue-file $path($<[3])         \
+         --stdout $path($<[0]) >$path($>)
+  }}
+}
+else
+  # Distribute both the pre-generated file (if present) and the sources.
+  #
+  ./: xhtml{+build2-kconfig-manual} \
+      cli{manual} xhtml{doc-prologue doc-epilogue} css{*}
+
+xhtml{*-prologue *-epilogue}: install = false

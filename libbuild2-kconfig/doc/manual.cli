@@ -1,0 +1,1983 @@
+"\name=build2-kconfig-manual"
+"\subject=Kconfig module"
+"\title=Kconfig Module"
+
+"
+\h0#preface|Preface|
+
+This document describes the \c{build2} Kconfig module. It starts with an
+introduction that briefly discusses what the Linux kernel configuration system
+(Kconfig) and the \c{build2} Kconfig module are. The next chapter expands on
+that and describes the integration of Kconfig into the \c{build2}
+configuration model in more detail.
+
+The remainder of the document serves as a guide into the Kconfig language with
+examples based on the \l{https://cppget.org/kconfig-hello \c{kconfig-hello}}
+package. Besides this guide, see also the official
+\l{https://www.kernel.org/doc/html/latest/kbuild/kconfig-language.html Kconfig
+Language} and
+\l{https://www.kernel.org/doc/html/latest/kbuild/kconfig-macro-language.html
+Kconfig Macro Language} documentation as well as the
+\l{https://docs.zephyrproject.org/latest/guides/kconfig/tips.html Kconfig Tips
+and Best Practices} from the Zephyr project.
+
+
+\h1#intro|Introduction|
+
+This chapter provides a brief overview of the Linux kernel configuration
+system (Kconfig) and the functionality provided by the \c{build2} Kconfig
+module. Its aim is to show how everything fits and works together based on a
+customary \i{Hello, World!} example.
+
+
+\h#intro-kconfig|What is Kconfig?|
+
+Kconfig is the configuration system of the Linux kernel. Over the years it has
+evolved into a sophisticated
+\l{https://gsd.uwaterloo.ca/sites/default/files/vm-2013-berger.pdf variability
+modelling language} and a toolset that are used by the Linux kernel to manage
+over ten thousan configuration options. It is also increasingly being used by
+a other projects that need to handle complex configurations.
+
+The Kconfig system consists of the following key parts:
+
+\ul|
+
+\li|The configuration definition language.|
+
+\li|The configuration management tools.|
+
+\li|The configuration values format.||
+
+The configuration definition language, or the Kconfig language for short,
+defines a hierarchy of menus containing configuration options as well as
+relatinships between them. Traditionally, configuration definitions are stored
+in files called \c{Kconfig} (with capital \c{K}). Here is a simple
+configuration containing two options:
+
+\
+$ cat <<EOF >Kconfig
+
+config FANCY
+        bool \"Fancy options\"
+        help
+          Enable more fancy configuration options.
+
+config GREETING
+        string \"Custom greeting\"
+        default \"Hello\"
+        depends on FANCY
+        help
+          Custom string to use as a greeting.
+
+EOF
+\
+
+\N|While the examples in this document assume a UNIX-like operation system,
+they should work with minimal modifications on Windows.|
+
+To create and manage configurations, the Kconfig system includes a number of
+tools called configurators. The most prominent of those are \c{kconfig-conf}
+which provides a terminal-based question-and-answer configuration method,
+\c{kconfig-mconf} which provides a terminal-based menu configuration method
+based on a curses library, and \c{kconfig-qconf} which provides a graphical
+configuration method based on Qt. The \c{kconfig-conf} configurator also
+provides a number of non-interractive configuration methods (default, random,
+etc), support for updating old configurations to new definitions (both
+interactively and non), as well as other configuration management facilities
+(creation of default configurations, etc).
+
+Given the above configuration definition (\c{Kconfig} file), we can run one
+of the configurators to create a new configuration. For example:
+
+\
+$ kconfig-conf Kconfig
+
+*
+* Main menu
+*
+Fancy options (FANCY) [N/y/?] (NEW) y
+  Custom greeting (GREETING) [Hello] (NEW) Hi
+#
+# configuration written to .config
+#
+\
+
+The configuration values are saved into a file that is traditionally called
+\c{.config} though this naming convention is not as universal as for the
+definition file (\c{Kconfig}). If we examine the file produced by the above
+command, we will see the following:
+
+\
+#
+# Automatically generated file; DO NOT EDIT.
+# Main menu
+#
+CONFIG_FANCY=y
+CONFIG_GREETING=\"Hi\"
+\
+
+The Kconfig system is best suited for complex configuration requirements where
+user input is needed at least in some situations (for example, new platforms,
+custom/optimized configurations, etc). Some of its more advanced features
+include:
+
+\ul|
+
+\li|String, integer, and choice configuration options in addition to boolean.|
+
+\li|Direct (\c{depends\ on}) and reverse (\c{select}, \c{imply}) option
+    relationships.|
+
+\li|Grouping into sub-menues, multi-file definitions (\c{source}).|
+
+\li|Make-like macro expansions in the definition language.|
+
+\li|Sophisticated set of tools for managing configurations.||
+
+
+\h#intro-kconfig-module|What is \c{build2} Kconfig module?|
+
+The \c{build2} Kconfig module provides the ability to use the Linux kernel
+configuration system to configure \c{build2} projects. Specifically, it
+integrates the execution of one of the Kconfig configurators into the
+\c{build2} \c{configure} meta-operation and loads the resulting configuration
+file presenting its values as \c{kconfig.*} \c{build2} variable values. We can
+then use these \c{kconfig.*} values to make decision in \c{buildfiles} and/or
+propagate them to our source code, similar to \c{config.*} values.
+
+As an example, let's see what it takes to add the Kconfig configuration shown
+in the previous section to a simple \c{build2} project. As a first step, let's
+create the \c{libhello} library using \l{bdep-new(1)}:
+
+\
+$ bdep new -l c++ -t lib --no-init libhello
+$ cd libhello
+\
+
+Next we copy the \c{Kconfig} definition file from the previous section into
+the \c{libhello/build/} subdirectory:
+
+\
+$ cp ../Kconfig build/
+\
+
+Finally, we edit \c{libhello/build/bootstrap.build} and load the \c{kconfig}
+module. Here is what the new \c{bootstrap.build} could look like:
+
+\
+project = libhello
+
+using version
+using config
+using kconfig
+using test
+using install
+using dist
+\
+
+Now if we configure our project, we will see the familiar prompt:
+
+\
+$ b configure
+kconfig build/config.kconfig.new
+*
+* libhello 0.1.0-a.0.19700101000000
+*
+Fancy options (FANCY) [N/y/?] (NEW) y
+  Custom greeting (GREETING) [Hello] (NEW) Hi
+save build/config.build
+mv build/config.kconfig.new build/config.kconfig
+\
+
+From other diagnostics we can gather that the configuration file was saved as
+\c{build/config.kconfig}. \N{The reason for first saving it as
+\c{config.kconfig.new} is explained in the next chapter.} We can confirm that
+its contents are similar to what we have already seen:
+
+\
+#
+# Automatically generated file; DO NOT EDIT.
+# libhello 0.1.0-a.0.19700101000000
+#
+CONFIG_FANCY=y
+CONFIG_GREETING=\"Hi\"
+\
+
+\N|The only difference in this file (as well as in the above prompt) is the
+replacement of \c{Main menu} with \c{libhello 0.1.0-a.0.19700101000000}. As
+the name suggests, this the title of the main menu which is the root of the
+Kconfig menu hierarchy. Customarily, it is set to the project name and version
+which the \c{kconfig} module does automatically. However, it can be customized
+with the \c{kconfig.kconfig.title} variable as discussed later.|
+
+By default the \c{kconfig} module uses the terminal-based question-and-answer
+configurator. It is a conservative choice that will work in most circumstances
+and is built into the module. However, we can use the \c{config.kconfig}
+variable to select a different configurator. For example, we can reconfigure
+our project using the graphical \c{kconfig-qconf} configurator \N{This
+requires the presence of the \c{kconfig-qconf} executable.}:
+
+\
+$ b configure config.kconfig=qconf
+\
+
+The \c{CONFIG_*} values from the configuration file are made available as
+\c{config.<project>.*} variables in \c{buildfiles} with the configuration
+option name converted to the lower case. For example, we can examine our
+values by adding the following \c{info} directives at the beginning of
+\c{libhello/buildfile}:
+
+\
+info \"fancy: $kconfig.libhello.fancy\"
+info \"greeting: $kconfig.libhello.greeting\"
+\
+
+If we now update our \c{libhello} project, we should see the following output:
+
+\
+$ b
+libhello/buildfile:1:1: info: fancy: true
+libhello/buildfile:2:1: info: greeting: Hi
+...
+\
+
+\N|The configuration values (\c{fancy} and \c{greeting}) used in this example
+are the same as what's shown in \l{b#proj-config Project Configuration} and
+the same mechanisms for post-processing and propagating configuration values
+apply here; in most examples from that chapter you can simply replace
+\c{config.libhello.*} with \c{kconfig.libhello.*}.|
+
+Analogous to \c{configure}, the standard \c{disfigure} meta-operation also
+remove the Kconfig configuration, or, more precisely, moves it to
+\c{config.kconfig.old}. For example:
+
+\
+$ b disfigure
+mv build/config.kconfig build/config.kconfig.old
+rm build/config.build
+\
+
+And that's pretty much all we have to do to integrate Kconfig-based
+configuration management into our project. One last touch would be to add
+\c{config.kconfig} to \c{build/.gitignore}, next to \c{config.build}:
+
+\
+/config.build
+/config.kconfig*
+...
+\
+
+\N|We've used a wildcard after \c{config.kconfig} to also ignore intermediate
+\c{config.kconfig.new} files (discussed later) as well as the
+\c{config.kconfig.old} file where Kconfig configurators traditionally save the
+previous configuration.|
+
+See \l{#iface-func Interface and Functionality} for more detail on the
+functionality offered by the \c{kconfig} module, including the available
+configurators, customization points, etc. For an introduction to the Kconfig
+language that also covers relevant \c{build2} integration aspects, refer to
+\l{#lang Kconfig Language}.
+
+
+\h1#iface-func|Interface and Functionality|
+
+This chapter provides a more detailed discussion of the \c{kconfig} module's
+interface and functionality including its integration with the \c{config}
+module's configuration process as well as the customization points available
+to projects that use Kconfig.
+
+
+\h#iface-func-conf-method|Configuration Methods|
+
+As we have seen in the introduction, the \c{config.kconfig} variable can be
+used to select the configurator, such as \c{mconf} or \c{qconf}. In fact, this
+variables also controls a few other aspects of producing new or updating an
+existing configuration which together we will call a \i{configuration method}.
+It has the following overall structure:
+
+\c{[(\b{new}|\b{old})\b{-}](\b{def}|\b{ask}|\b{reask}|\b{mconf}|\b{qconf}|\b{env}) [...]}
+
+The optional first component controls the reuse of existing
+\c{config.kconfig}. If \c{new} is specified, then the configuration is created
+from scratch (with existing \c{config.kconfig}, if exists, saved as
+\c{config.kconfig.old}). If \c{old} is specified, then the configuration is
+created based on existing \c{config.kconfig} (with what \"based\" means
+determined by the second component). In this case, it's an error for there to
+be no existing \c{config.kconfig}. If the first component is omitted, then
+existing \c{config.kconfig} is reused if present (\c{old} semantics) and
+created from scratch otherwise (\c{new} semantics).
+
+Given a configuration option definition in the Kconfig file, it's value can
+come from the following sources:
+
+\ol|
+
+\li|Existing \c{config.kconfig} file.|
+
+\li|Default configuration file.|
+
+\li|Default value from the \c{Kconfig} file.||
+
+A configuration option that does not have a value in existing
+\c{config.kconfig} is referred to as a \i{newly-defined configuration
+option}. Naturally, if \c{config.kconfig} does not exist or is not used
+(because of the \c{new} first component), then all options are newly-defined.
+
+The second component determines the configurator and its mode and has the
+following possible values:
+
+\dl|
+
+\li|\c{\b{def} [\i{file}]}\n
+
+Set newly-defined configuration options to values from \ci{file} if specified
+and to their default values from \c{Kconfig} otherwise (if some options are
+missing in \ci{file}, they are set to default values as well). To reset all
+the configuration options, use \c{new-def}.|
+
+\li|\c{\b{ask} [\i{file}]}\n
+
+Ask for values of only newly-defined configuration options. For default
+answers use values from \ci{file} if specified and default values from
+\c{Kconfig} otherwise.
+
+Note that if \c{config.kconfig} does not exist or is not used (\c{new-ask})
+then this method is equivalent to \c{reask}.|
+
+\li|\c{\b{reask} [\i{file}]}\n
+
+Ask for values of all the configuration options. For default answers use
+values from \c{config.kconfig} if exists, from \ci{file} if specified, and
+default values from \c{Kconfig} otherwise.|
+
+\li|\cb{mconf}\n
+
+Present all the configuration options in a menu interface. For default
+answers, use values from \c{config.kconfig} if exists and default values from
+\c{Kconfig} otherwise.|
+
+\li|\cb{qconf}\n
+
+Present all the configuration options in a graphical interface. For default
+answers, use values from \c{config.kconfig} if exists and default values from
+\c{Kconfig} otherwise.|
+
+\li|\c{\b{env} \i{prog} [\i{args}]}\n
+
+Run \ci{prog} in the configuration environment (\c{KCONFIG_CONFIG}, etc)
+passing the \c{Kconfig} file as the last argument. For example:
+
+\
+config.kconfig=\"env kconfig-conf --savedefconfig defconfig.kconfig\"
+\
+
+||
+
+\N|The \c{def}, \c{ask}, and \c{reask} methods are implemented as builtins and
+do not require the presence of the \c{kconfig-conf} executable.|
+
+If no configuration method is specified with \c{config.kconfig}, then \c{ask}
+is used by default. However, a project may specify a different default
+configuration method as discussed in the next section.
+
+\N|Mapping for some of the \c{kconfig-conf} options to the above methods:
+
+\
+--oldconfig             ask
+--oldaskconfig          reask
+--olddefconfig          def
+--alldefconfig      new-def
+--defconfig <file>  new-def <file>
+\
+
+Note that the following methods have no \c{kconfig-conf} equivalents:
+
+\
+old-def <file>
+[re]ask <file>
+\
+
+|
+
+\h#iface-func-conf-load|Configuring and Loading|
+
+As mentioned briefly in the introduction, \c{kconfig} acts as a second-level
+configuration mechanis to the builtin support in the form of \c{config.*}
+variables and the \c{config} module. In particular, the \c{kconfig} module
+hooks into the \c{configure} and \c{disfigure} meta-operations of the
+\c{config} module providing an integrated configuration process. It is also
+possible to use the \c{config.*} variables (as well as other \c{buildfile}
+variables) as inputs to the \c{kconfig} configuration. This chapter provides
+more details on how this is achieved and the available customization points.
+
+To understand how \c{kconfig} fits in, we begin with an overview of the
+builtin configuration process, that is, what happens when we execute the
+\c{configure} meta-operation. While the \c{config} module is loaded in
+\c{bootstrap.build}, the \c{config.build} file (if exists) is loaded as a
+first step of loading \c{root.build} (more precisely, \c{config.build} is
+loaded before any bootstrapped module is initialized, which happens prior to
+loading \c{root.build}). After that, \c{root.build} and the rest of the
+project are loaded as usual. In particular, during this stage, \c{root.build}
+or any other project \c{buildfile} can examine the \c{config.*} variables (as
+loaded from \c{config.build} and/or specified as command line overrides) and
+cause this stage to fail (for example, using the \c{assert} directive) if any
+values are deemed invalid. If loading of the project succeeds, the \c{config}
+module saves the new \c{config.build} file which completes the \c{configure}
+meta-operation.
+
+The important point about this process is that the new configuration is saved
+as the last step, after successfully loading the project. And the \c{kconfig}
+module attempts to provides the second-level configuration semantics that is
+consistent with this behavior. Specifically, while the \c{kconfig} module must
+also be loaded (bootsrapped) in \c{bootstrap.build}, it also delays loading
+\c{config.kconfig} until later. However, unlike the \c{config} module, by
+default, it loads its configuration after \c{root.build}. This semantics was
+choosen to allow the first-level configuration as well as any other
+information made available by modules loaded in \c{root.build} to influence
+the Kconfig configuration. However, we can also load \c{config.kconfig} at any
+point in \c{root.build} by explicitly loading (initializing) the \c{kconfig}
+module. For example, continuing with the \c{libhello} example from the
+previous chapter, we could have something like this in our \c{root.build}:
+
+\
+using cxx
+
+using kconfig
+
+if ($cxx.target.class != 'windows' && kconfig.libhello.fancy)
+  fail \"have to keep it basic on Windows\"
+\
+
+Similar to the \c{config} behavior, the \c{kconfig} module also saves the
+configuration only after the project has successfully been loaded. Achieveing
+this semantics, however, is not as straightforward as in the \c{config} module
+because the configuration must also be loaded during the project loading, as
+discussed above. To implement this, \c{kconfig} first saves the configuration
+to a temporary file, \c{config.kconfig.new} that we've already seen, and then
+renames it to \c{config.kconfig} at the end. Specifically, the \c{kconfig}
+module performs the following steps during \c{configure}:
+
+\dl|
+
+\li|\c{bootstrap.build}\n
+
+Register the post-\c{configure} callback with the \c{config} module.|
+
+\li|\c{root.build}\n
+
+Run the configurator saving the result to \c{config.kconfig.new}.|
+
+\li|\c{configure}\n
+
+In post-\c{configure} rename \c{config.kconfig.new} to \c{config.kconfig}.||
+
+When not configuring, the \c{kconfig} module simply loads \c{config.kconfig}
+and verifies it is up-to-date with definitions in \c{Kconfig}. If that's not
+the case, for example, because we've added or a removed a configuration
+option, then \c{kconfig} fails suggesting that we reconfigure the project.
+
+As mentioned in the previous section, a project may specify the default
+configuration method that will be used if not explicitly specified with
+\c{config.kconfig}. More precisely, the project may set the
+\c{kconfig.kconfig.{configure,reconfigure,retryconfigure\}} variables to
+select the default method for creating new, updating existing, and trying to
+fix previously created/updated configurations, respectively.
+
+To elaborate, the \c{kconfig.kconfig.configure} method is used when
+configuring a project from scratch, without \c{config.kconfig} while the
+\c{kconfig.kconfig.reconfigure} is used while reconfiguring a project with
+existing \c{config.kconfig}. The \c{kconfig.kconfig.retryconfigure} is used
+when reconfiguring a project with existing \c{config.kconfig.new}, which
+normally means that the previous (re)configuration attempt has failed or was
+interrupted. The default values for these variables are \c{reask}, \c{ask},
+and \c{reask}, respectively.
+
+\N|Setting \c{kconfig.kconfig.retryconfigure} to a method that does not allow
+the user to adjust every configuration option may result in an invalid
+configuration that can only be fixed by reconfiguring from scratch.|
+
+As an example, if we wanted our project to use the default values from
+\c{Kconfig} and only use interactive configuration if explicitly requested by
+the user (or if the default configuration turned out to be invalid), we could
+add the following to our \c{root.build}:
+
+\
+kconfig.kconfig.configure = new-def
+kconfig.kconfig.reconfigure = old-def
+
+using kconfig
+\
+
+\N|Provided this makes sense for your project, it's a good idea to make the
+default configuration method non-interactive. This will allow you to use the
+CI service and, if desired, publish your project to a package repository.
+While interactive default configuration may make sense for an \i{end-product}
+kind of projects, for reusable components such as libraries a non-interactive
+default that enables most of the functionality is probably the best choice.
+See \l{b#proj-config Project Configuration} for background.|
+
+What happens if we try to build our project without \c{config.kconfig}? By
+default \c{kconfig} fails suggesting that we configure the project. However,
+this behavior can be altered with the \c{kconfig.kconfig.transient} variable.
+Setting it to \c{ask} (which is the default), disables the ability to use
+transient configurations. For example, in the above project it would make
+sense to also use default values for transient configurations:
+
+\
+kconfig.kconfig.configure = new-def
+kconfig.kconfig.reconfigure = old-def
+kconfig.kconfig.transient = def
+
+using kconfig
+\
+
+Besides the default values from \c{Kconfig} files, another common source of
+default values are \i{default configurations}. This approach is more
+appropriate when we have multiple sets of default values, for instance, one
+per target platform. As an example, let's convert the above project to use the
+default configuration files in the \c{defconfig-\i{platform}.kconfig} where
+\ci{platform} is the target class as supplied by the \c{cxx.target.class}
+varaible (\c{linux}, \c{windows}, \c{macos}, etc). Here are the changes
+to \c{root.build}:
+
+\
+using cxx
+
+defconfig = $src_root/build/defconfig-$(cxx.target.class).kconfig
+
+kconfig.kconfig.configure = new-def $defconfig
+kconfig.kconfig.reconfigure = old-def $defconfig
+kconfig.kconfig.transient = def $defconfig
+
+using kconfig
+\
+
+\N|The \c{build/Kconfig} file and files that it sources as well as
+\c{build/defconfig*.kconfig} are automatically added to the distribution and
+need not be explicitly mentioned as prerequisites in \c{buildfiles}.|
+
+While any Kconfig configuration file can serve as a default configuration,
+normally a minimal version is produced using \c{kconfig-conf --savedefconfig}.
+Given a suitably configured project, we can extract the correponding default
+configuration using the \c{env} method:
+
+\
+$ b configure config.kconfig=\
+\"env kconfig-conf --savedefconfig defconfig-linux.kconfig\"
+\
+
+We can also do it manually given just the configuration file, for example:
+
+\
+$ KCONFIG_CONFIG=config.kconfig \
+  kconfig-conf --savedefconfig defconfig-linux.kconfig Kconfig
+\
+
+\N|If your \c{Kconfig} definition file relies on external inputs (as discussed
+next), then with the manual extraction you will also need to manually supply
+such inputs via environment variables.|
+
+\h#iface-func-ext-macro|External Kconfig Macro Variables|
+
+Selecting the default configuration based on the target platform as shown in
+the previous section is one example of using information from the first-level
+configuration and/or modules loaded before \c{kconfig} to adjust the Kconfig
+configuration. It is, however, also possible to modify the \c{Kconfig}
+definition file itself based on such information by setting external Kconfig
+macro variables.
+
+The Kconfig language includes a macro variable facility that can be used for
+textual substituion (see \l{#lang-macro Macro Language} for details). As an
+example, let's try to improve on our previous attempt to only allow fancy
+options in certain cases:
+
+\
+using cxx
+
+using kconfig
+
+if ($cxx.target.class != 'windows' && kconfig.libhello.fancy)
+  fail \"have to keep it basic on Windows\"
+\
+
+Ideally, instead of allowing the user to select the fancy option and then
+complaining that it can't be selected for certain platforms, we would want to
+make it impossible to select in the first place when configuring for such
+platforms. As a first step, let's introduce a Kconfig macro variable and make
+the \c{FANCY} option depend on its value:
+
+\
+ENABLE_FANCY := y
+
+config FANCY
+        bool \"Fancy options\"
+        depends on $(ENABLE_FANCY)
+        help
+          Enable more fancy configuration options.
+
+...
+\
+
+With this change we can now enable/disable the fancy options by adjusting the
+\c{ENABLE_FANCY} Kconfig macro variable. The next step is to somehow set it
+from outside the \c{Kconfig} file. With the \c{kconfig} module we can do that
+by simply setting the corresponding \c{Kconfig.*} variable (with capital
+\c{K}) in our \c{buildfile}. \N{If invoking one of the configurators directly,
+then such variables are set through the environment}. In our example, let's
+remove the \c{ENABLE_FANCY} assignment from \c{Kconfig} and rewrite
+\c{root.build} as follows:
+
+\
+using cxx
+
+Kconfig.ENABLE_FANCY = ($cxx.target.class != 'windows')
+
+using kconfig
+\
+
+\N|\c{Kconfig.*} values of type \c{bool} are automatically converted from
+Buildfile \c{true}/\c{false} to Kconfig \c{y}/\c{n}. Other value types are
+passed to Kconfig by converting to string.|
+
+The Kconfig macro variables can be used in many contexts, for example, in
+default values. However, such dynamically-changing Kconfig definitions become
+hard to reason about and can lead to surprises. As a result, it's probably
+wise to limit the use of external variables to disabling options and menus
+rather than altering their definitions.
+
+A macro expansion refencing a variable that is not set inside the \c{Kconfig}
+file nor via the \c{Kconfig.*} Buildfile variable is considered an error.  The
+only builtin variable set automatically by the \c{kconfig} module is
+\c{SRC_ROOT} which contains the project's source root directory (the same as
+the \c{src_root} Buildfile variable). It is normally used to source
+(\l{#lang-source Source}) additional \c{Kconfig} files, for example:
+
+\
+source \"$(SRC_ROOT)/libhello/Kconfig\"
+\
+
+\h1#lang|Kconfig Language|
+
+Kconfig is a line-oriented language. That is, a construct ends at the end of
+the line unless escaped with line continuation (trailing \c{\\}). The \c{#}
+character starts a comment with everything from this character and until the
+end of the line ignored. This character and other special characters (quotes,
+\c{$}, etc) can be escaped with a backslash.
+
+Kconfig has single-quoted (\c{'}) and double-quoted (\c{\"}) strings with
+identical semantics. Inside strings, all characters except the closing quote
+and \c{$} (macro substitution) are treated literally. For example, the
+following two Kconfig strings are the same:
+
+\
+\"foo \\\"bar\\\" \\$(baz)\"
+'foo \"bar\" \\$(baz)'
+\
+
+A \c{Kconfig} file starts with zero or more macro variable assignments
+(\l{#lang-macro Macro Language}) followed by zero or more Kconfig definitions
+which may source (\l{#lang-source Source (source)}) other \c{Kconfig} files.
+Each definition starts with a keyword. For example:
+
+\
+# This is a comment.
+
+DEFAULT_GREETING := Hello
+
+config GREETING
+        string \"Custom greeting\"
+        default \"$(DEFAULT_GREETING)\"
+
+source \"$(SRC_ROOT)/Kconfig\"
+\
+
+The below synopsis lists all the available Kconfig definitions with the
+following sections explaining their semantics using examples from the
+\l{https://cppget.org/kconfig-hello \c{kconfig-hello}} package. For additional
+background and details see the official
+\l{https://www.kernel.org/doc/html/latest/kbuild/kconfig-language.html Kconfig
+Language} and
+\l{https://www.kernel.org/doc/html/latest/kbuild/kconfig-macro-language.html
+Kconfig Macro Language} documentation as well as the
+\l{https://docs.zephyrproject.org/latest/guides/kconfig/tips.html Kconfig Tips
+and Best Practices} from the Zephyr project.
+
+
+\c{\b{config} \i{symbol}\n
+\ \ \ \ \ \ \i{type} [\i{prompt} [\b{if} \i{expr}]]\n
+\ \ \ \ \ \ \b{prompt} \i{prompt} [\b{if} \i{expr}]\n
+\ \ \ \ \ \ \b{default} \i{value} [\b{if} \i{expr}]\n
+\ \ \ \ \ \ \b{range} \i{integer} \i{integer} [\b{if} \i{expr}]\n
+\ \ \ \ \ \ \b{depends on} \i{expr}\n
+\ \ \ \ \ \ \b{select} \i{symbol} [\b{if} \i{expr}]\n
+\ \ \ \ \ \ \b{imply} \i{symbol} [\b{if} \i{expr}]\n
+\ \ \ \ \ \ \b{help}\n
+\ \ \ \ \ \ \ \ \i{text}\n
+\n
+\b{if} \i{expr}\n
+...\n
+\b{endif}\n
+\n
+\b{menu} \i{prompt}\n
+\ \ \ \ \ \ \b{visible if} \i{expr}\n
+\ \ \ \ \ \ \b{depends on} \i{expr}\n
+...\n
+\b{endmenu}\n
+\n
+\b{menuconfig} \i{symbol}\n
+\ \ \ \ \ \ ...\n
+\n
+\b{choice} [\i{symbol}]\n
+\ \ \ \ \ \ \b{optional}\n
+\ \ \ \ \ \ \b{default} \i{symbol} [\b{if} \i{expr}]\n
+\ \ \ \ \ \ ...\n
+...\n
+\b{endchoice}\n
+\n
+\b{comment} \i{prompt}\n
+\ \ \ \ \ \ \b{depends on} \i{expr}\n
+\n
+\b{source} \i{path}\n
+\n
+\i{type} \ \ \ = \b{bool} | \b{string} | \b{int} | \b{hex} | \b{tristate}\n
+\i{value} \ \ = (\b{y}|\b{n}) | \i{string} | \i{integer} | (\b{y}|\b{m}|\b{n})\n
+\i{string} \ = \b{\"}\i{text}\b{\"} | \b{\'}\i{text}\b{\'}\n
+\i{integer} = \i{dec-integer} | \b{0x}\i{hex-integer}\n
+\i{prompt} \ = \i{string}\n
+\i{path} \ \ \ = \i{string}\n
+\n
+\i{term} = \i{symbol} | \i{value}\n
+\i{expr} = \i{term} \ \ \ \ \ \ \ \ \ \ \ |\n
+\ \ \ \ \ \ \ \i{term} \b{=} \i{term} \ \ \ \ |\n
+\ \ \ \ \ \ \ \i{term} \b{!=} \i{term} \ \ \ |\n
+\ \ \ \ \ \ \ \i{term} \b{<} \i{term} \ \ \ \ |\n
+\ \ \ \ \ \ \ \i{term} \b{>} \i{term} \ \ \ \ |\n
+\ \ \ \ \ \ \ \i{term} \b{<=} \i{term} \ \ \ |\n
+\ \ \ \ \ \ \ \i{term} \b{>=} \i{term} \ \ \ |\n
+\ \ \ \ \ \ \ \b{(} \i{expr} \b{)} \ \ \ \ \ \ \ |\n
+\ \ \ \ \ \ \ \b{!} \i{expr} \ \ \ \ \ \ \ \ \ |\n
+\ \ \ \ \ \ \ \i{expr} \b{&&} \i{expr} \ \ \ |\n
+\ \ \ \ \ \ \ \i{expr} \b{||} \i{expr}}
+
+
+\h#lang-option|Option (\c{config})|
+
+\c{\b{config} \i{symbol}\n
+\ \ \ \ \ \ \i{type} [\i{prompt} [\b{if} \i{expr}]]\n
+\ \ \ \ \ \ \b{prompt} \i{prompt} [\b{if} \i{expr}]\n
+\ \ \ \ \ \ \b{default} \i{value} [\b{if} \i{expr}]\n
+\ \ \ \ \ \ \b{range} \i{integer} \i{integer} [\b{if} \i{expr}]\n
+\ \ \ \ \ \ \b{depends on} \i{expr}\n
+\ \ \ \ \ \ \b{select} \i{symbol} [\b{if} \i{expr}]\n
+\ \ \ \ \ \ \b{imply} \i{symbol} [\b{if} \i{expr}]\n
+\ \ \ \ \ \ \b{help}\n
+\ \ \ \ \ \ \ \ \i{text}\n
+\n
+\b{if} \i{expr}\n
+...\n
+\b{endif}\n
+\n
+\i{type} \ \ \ = \b{bool} | \b{string} | \b{int} | \b{hex} | \b{tristate}\n
+\i{value} \ \ = (\b{y}|\b{n}) | \i{string} | \i{integer} | (\b{y}|\b{m}|\b{n})\n
+\i{string} \ = \b{\"}\i{text}\b{\"} | \b{\'}\i{text}\b{\'}\n
+\i{integer} = \i{dec-integer} | \b{0x}\i{hex-integer}\n
+\i{prompt} \ = \i{string}\n
+\n
+\i{term} = \i{symbol} | \i{value}\n
+\i{expr} = \i{term} \ \ \ \ \ \ \ \ \ \ \ |\n
+\ \ \ \ \ \ \ \i{term} \b{=} \i{term} \ \ \ \ |\n
+\ \ \ \ \ \ \ \i{term} \b{!=} \i{term} \ \ \ |\n
+\ \ \ \ \ \ \ \i{term} \b{<} \i{term} \ \ \ \ |\n
+\ \ \ \ \ \ \ \i{term} \b{>} \i{term} \ \ \ \ |\n
+\ \ \ \ \ \ \ \i{term} \b{<=} \i{term} \ \ \ |\n
+\ \ \ \ \ \ \ \i{term} \b{>=} \i{term} \ \ \ |\n
+\ \ \ \ \ \ \ \b{(} \i{expr} \b{)} \ \ \ \ \ \ \ |\n
+\ \ \ \ \ \ \ \b{!} \i{expr} \ \ \ \ \ \ \ \ \ |\n
+\ \ \ \ \ \ \ \i{expr} \b{&&} \i{expr} \ \ \ |\n
+\ \ \ \ \ \ \ \i{expr} \b{||} \i{expr}}
+
+The central part of the Kconfig language is the configuration option
+definition with the rest serving to organize options into a submenus. A simple
+\c{Kconfig} file may consists of just option definitions which all become
+entries of the implicitly-defined main menu (discussed in the next section).
+
+The option definition starts with the \c{config} keyword followed by the
+option name, which in the Kconfig language is called a \i{symbol}. For
+example:
+
+\
+config IO
+        bool \"IO support\"
+        help
+          Enable stdin/stdout input/output. Note that if this option
+          is disabled, then you won't see any output.
+\
+
+\N|Other Kconfig documentation often uses the term symbol to mean the
+configuration option, not just its name.|
+
+The name is traditionally spelled in the upper case and it is the same thing
+as what will end up in the configuration file but prefixed with \c{CONFIG_}
+and as a Buildfile variable but converted into the lower case and prefixed
+with \c{kconfig.<project>.}.
+
+Following the \c{config} keyword and the name we have a number of lines that
+define the configuration option's attributes which are traditionally indented
+by 8 spaces (or an equivalent TAB). While none of the attributes are
+mandatory, a definition will normally include at least the type and usually
+also the prompt and help, as in the above example.
+
+A number of attributes support the \c{if\ \i{expr}} condition. If specified,
+the attribute only applies if the expression evaluates to true (
+\l{#lang-option-expr Expressions}).  Such attributes can also be specified
+multiple times. For example:
+
+\
+config GREETING_TEXT
+        string \"Custom greeting\" if GREETING_CUSTOM
+        default \"Hello\" if GREETING_HELLO
+        default \"Hi\"    if GREETING_HI
+        default \"Howdy\" if GREETING_HOWDY
+        help
+          Custom string to use as a greeting.
+\
+
+In this example, the \c{GREETING_TEXT} option will only be visible if the
+\c{GREETING_CUSTOM} option is selected and the default value is choosen based
+on which \c{GREETING_H*} option is selected.
+
+
+\h2#lang-option-prompt-help|Prompt and Help|
+
+\c{\b{config} \i{symbol}\n
+\ \ \ \ \ \ \i{type} [\i{prompt} [\b{if} \i{expr}]]\n
+\ \ \ \ \ \ \b{prompt} \i{prompt} [\b{if} \i{expr}]\n
+\ \ \ \ \ \ \b{help}\n
+\ \ \ \ \ \ \ \ \i{text}\n
+\n
+\i{string} \ = \b{\"}\i{text}\b{\"} | \b{\'}\i{text}\b{\'}\n
+\i{prompt} \ = \i{string}}
+
+Configuration option prompt is a short text that describes the option to the
+user while the option help provides a more detailed description. For example:
+
+\
+config IO
+        bool
+        prompt \"IO support\"
+        help
+          Enable stdin/stdout input/output. Note that if this option
+          is disabled, then you won't see any output.
+\
+
+If an option has a visible prompt (that is, the prompt is not disabled with
+\c{if\ \i{expr}}) and its dependencies are satisfied (\l{#lang-option-dep
+Dependencies}), then the option is presented to the user for
+customization. For example:
+
+\
+$ b configure
+
+IO support (IO) [N/y/?] (NEW) ?
+
+CONFIG_IO:
+
+Enable stdin/stdout input/output. Note that if this option
+is disabled, then you won't see any output.
+
+Symbol: IO [=n]
+Type  : bool
+Defined at kconfig-hello/build/Kconfig:18
+  Prompt: IO support
+  Location:
+    -> Basic options
+\
+
+The option prompt can be specified with the \c{prompt} attribute as in the
+above example or it can be combined with the type attribute for brevity. For
+example:
+
+\
+config IO
+        bool \"IO support\"
+        ...
+\
+
+This shorter version is customarily preferred unless selecting between several
+prompts with \c{if\ \i{expr}}. In both versions the prompt text can be
+specified using either single or double quotes.
+
+The option help often contains several lines of text and is specified indented
+(customarily with 2 spaces) relative to the line that contains the \c{help}
+keyword. The help text ends at the line that has a smaller indentation than
+the first line of the help text.
+
+While an option with an invisible prompt cannot be modified by the user, it
+can still be modified by other options through reverse dependencies and its
+value is accessible via the corresponding \c{kconfig.*} variable. An option
+with an absent prompt that is selected through such reverse dependencies is
+called a \i{helper option}. See \l{#lang-option-helper Helper Options} for
+more information on their use-cases.
+
+
+\h2#lang-option-type-default|Type, Default Value, and Range|
+
+\c{\b{config} \i{symbol}\n
+\ \ \ \ \ \ \i{type} [\i{prompt} [\b{if} \i{expr}]]\n
+\ \ \ \ \ \ \b{default} \i{value} [\b{if} \i{expr}]\n
+\ \ \ \ \ \ \b{range} \i{integer} \i{integer} [\b{if} \i{expr}]\n
+\n
+\i{type} \ \ \ = \b{bool} | \b{string} | \b{int} | \b{hex} | \b{tristate}\n
+\i{value} \ \ = (\b{y}|\b{n}) | \i{string} | \i{integer} | (\b{y}|\b{m}|\b{n})\n
+\i{string} \ = \b{\"}\i{text}\b{\"} | \b{\'}\i{text}\b{\'}\n
+\i{integer} = \i{dec-integer} | \b{0x}\i{hex-integer}}
+
+Configuration option type can be \c{bool} (boolean), \c{string}, \c{int}
+(decimal integer), \c{hex} (hexadecimal integer), and \c{tristate}:
+
+\dl|
+
+\li|\n\n\cb{bool}
+
+True or false state. Values of this type are spelled as \c{y} or \c{n}, for
+example:
+
+\
+config FOO
+        bool
+        default y
+\
+
+When converted to the \c{kconfig.*} variables, such values have the \c{bool}
+Buildfile type.\n\n|
+
+
+\li|\cb{string}
+
+Text string. Values of this type are spelled using either single or double
+quotes, for example:
+
+\
+config FOO
+        string
+        default \"foo\"
+\
+
+When converted to the \c{kconfig.*} variables, such values have the \c{string}
+Buildfile type.\n\n|
+
+
+\li|\cb{int}
+
+Signed 64-bit decimal integer. Values of this type are spelled as a sequence
+of decimal digits, for example:
+
+\
+config FOO
+        int
+        default 123
+\
+
+When converted to the \c{kconfig.*} variables, such values have the \c{int64}
+Buildfile type.\n\n|
+
+
+\li|\cb{hex}
+
+Unsigned 64-bit hexadecimal integer. Values of this type are spelled as a
+sequence of hexadecimal digits prefixed with \c{0x}, for example:
+
+\
+config FOO
+        hex
+        default 0x1ab2c3d4
+\
+
+When converted to the \c{kconfig.*} variables, such values have the \c{uint64}
+Buildfile type.\n\n|
+
+
+\li|\cb{tristate}
+
+Like \c{bool} but with an extra state (\c{m}) used to express modularity. See
+\l{#lang-mod Modularity Support} for details on this functionality.\n\n||
+
+The default value for a configuration option can be specified with the
+\c{default} attribute. For example:
+
+\
+config PUNCT
+        string \"End of greeting punctuation\"
+        default \"!\"
+        help
+          Character for punctuating the end of the greeting sentence.
+\
+
+This value will be used as the suggested answer in interactive configurations
+methods and as a fallback in non-interactive (see \l{#iface-func-conf-method
+Configuration Methods}) for details. If no default value specified, \c{n} is
+assumed for \c{bool} and \c{tristate} and empty string for \c{string} while
+there is no assumed default for \c{int} and \c{hex}.
+
+Options of type \c{int} and \c{hex} can also specify the expected value range
+with the \c{range} attribute (both ends are inclusive). If specified, the user
+will not be allowed to enter a value that is out of this range. For example:
+
+\
+config NAME_ASK_MAX
+        int \"Max times to ask for name\"
+	default 5
+	range 1 10
+        help
+          Maximum number of times to ask for the name to greet.
+\
+
+
+\h2#lang-option-dep|Dependencies|
+
+\c{\b{config} \i{symbol}\n
+\ \ \ \ \ \ \b{depends on} \i{expr}\n
+\n
+\b{if} \i{expr}\n
+...\n
+\b{endif}}
+
+The \c{depends\ on} attribute is used to specify a dependency of one option on
+another. For example:
+
+\
+config IO
+        bool \"IO support\"
+
+config NAME_ASK
+        bool \"Ask for name\"
+        depends on IO
+\
+
+If an option's dependency is not satisfied, then the option becomes
+\i{disabled}: the user is not prompted for its value and its default value is
+not used. For \c{bool} and \c{tristate}, the disabled option is set to \c{n}.
+For other types, disabled option's value is not set and the corresponding
+\c{kconfig.*} variable is \c{[null]}.
+
+The \c{depends\ on} attribute can also be used to specify a dependency on an
+expression involving more than one option or non-boolean options (see
+\l{#lang-option-expr Expressions} for details). For example:
+
+\
+config RETRY
+        int \"Max times to retry\"
+
+config NAME_ASK
+        bool \"Ask for name\"
+        depends on IO && RETRY != 0
+\
+
+Specifying multiple \c{depends\ on} attributes is equivalent to specifying
+their expressions with a single \c{depends\ on} connected with \c{&&}. For
+example, this variant is eqivalent to the above:
+
+\
+config NAME_ASK
+        bool \"Ask for name\"
+        depends on IO
+        depends on RETRY != 0
+\
+
+If we have multiple options with the same dependency, then instead of
+repeating the \c{depends\ on} attribute in each of them we can use the
+\c{if}-block for a more succinct result. For example:
+
+\
+config IO
+        bool \"IO support\"
+
+if IO
+
+config NAME_ASK
+        bool \"Ask for name\"
+
+config TRACE
+        bool \"Trace execution\"
+
+endif
+\
+
+The semantics of the \c{if}-block is equivalent to specifying an explicit
+\c{depends\ on} attribute with \c{if}-expression for each entry until
+\c{endif}.
+
+
+\h2#lang-option-rev-dep|Reverse Dependencies|
+
+\c{\b{config} \i{symbol}\n
+\ \ \ \ \ \ \b{select} \i{symbol} [\b{if} \i{expr}]\n
+\ \ \ \ \ \ \b{imply} \i{symbol} [\b{if} \i{expr}]}
+
+A reverse dependency is used to \i{enable} an option from another option. For
+example:
+
+\
+config IO
+        bool \"IO support\"
+
+config NAME_ASK
+        bool \"Ask for name\"
+        select IO
+\
+
+In this example, if \c{NAME_ASK} is set to \c{y}, then \c{IO} is forced to
+\c{y} as well.
+
+Reverse dependencies can only be used with \c{bool} and \c{tristate} options
+and there two flavors: strong and weak.
+
+A strong reverse dependency is specified with the \c{select} attribute. It
+forces the option specified after the \c{select} keyword to \c{y} whenever the
+option containing this attribute is set to \c{y} (for \c{tristate} options,
+the same logic applies for \c{m}). And by \i{forces} we mean just that: it
+disregard unsatisfied dependencies and user selection.
+
+Note that this forceful nature of strong reverse dependencies often leads to
+puzzling configuration issues. For example, a user may be trying to
+unsuccessfully disable a feature without realizing that it is forced by
+another, seemingly unrelated option. Such issues can be very frustrating and
+time-consuming to figure out and, as a result, the use of reverse dependecies
+on user-visible options is not recommended. Using \c{select} on invisible
+options, however, is a usefult mechanism as described in
+\l{#lang-option-helper Helper Options}.
+
+A weak reverse dependency is specified with the \c{imply} attribute. As the
+name suggests, it does not force but merely recommends. The other option can
+still be set to \c{n} by the user or if any of its dependecies are
+unsatisfied. For example:
+
+\
+config IO
+        bool \"IO support\"
+        default y
+        imply NAME_ASK
+
+config NAME_ASK
+        bool \"Ask for name\"
+\
+
+In this example, if the user selects \c{y} for \c{IO}, then the prompt for
+\c{NAME_ASK} will also have \c{y} as the default answer. However, the user can
+still disable \c{NAME_ASK} by answering \c{n}. Similarly, if configuring
+non-interactively using the default values (\c{config.kconfig=def}), then
+\c{NAME_ASK} will be set to \c{y} because \c{IO} is set to \c{y} (becasue of
+its \c{default\ y} attribute).
+
+
+\h2#lang-option-expr|Expressions|
+
+\c{\i{value} \ \ = (\b{y}|\b{n}) | \i{string} | \i{integer} | (\b{y}|\b{m}|\b{n})\n
+\i{string} \ = \b{\"}\i{text}\b{\"} | \b{\'}\i{text}\b{\'}\n
+\i{integer} = \i{dec-integer} | \b{0x}\i{hex-integer}\n
+\n
+\i{term} = \i{symbol} | \i{value}\n
+\i{expr} = \i{term} \ \ \ \ \ \ \ \ \ \ \ |\n
+\ \ \ \ \ \ \ \i{term} \b{=} \i{term} \ \ \ \ |\n
+\ \ \ \ \ \ \ \i{term} \b{!=} \i{term} \ \ \ |\n
+\ \ \ \ \ \ \ \i{term} \b{<} \i{term} \ \ \ \ |\n
+\ \ \ \ \ \ \ \i{term} \b{>} \i{term} \ \ \ \ |\n
+\ \ \ \ \ \ \ \i{term} \b{<=} \i{term} \ \ \ |\n
+\ \ \ \ \ \ \ \i{term} \b{>=} \i{term} \ \ \ |\n
+\ \ \ \ \ \ \ \b{(} \i{expr} \b{)} \ \ \ \ \ \ \ |\n
+\ \ \ \ \ \ \ \b{!} \i{expr} \ \ \ \ \ \ \ \ \ |\n
+\ \ \ \ \ \ \ \i{expr} \b{&&} \i{expr} \ \ \ |\n
+\ \ \ \ \ \ \ \i{expr} \b{||} \i{expr}}
+
+Kconfig expressions are used in a number of option attributes to determine
+visibility, establish dependencies, and to enable default values. And as we
+will see in later sections, they are also used for similar purposes in other
+Kconfig definitions. The result of evaluating an expression is boolean \c{y}
+(true) or \c{n} (false).
+
+\N|More precisely, Kconfig expressions use the tristate logic with the extra
+\c{m} state used to represent modularity. For the evaluation purposes, the
+\c{m} state is equivalent to \c{y} if modules are enabled. See \l{#lang-mod
+Modularity Support} for details.|
+
+Expression alternatives in the above production are listed in the decreasing
+order of precedence. Values in expressions are spelled as in the \c{default}
+attribute (\l{#lang-option-type-default Type, Default Value, and Range}).
+
+A terminal expression consisting of a symbol evaluates to true if the
+corresponding option is of type \c{bool} or \c{tristate} and is \c{y} (or
+\c{m} and modules are enabled). In this context all other option types always
+evaluate to \c{n}. A terminal expression consisting of a value evaluates to
+true if it is either \c{y} or \c{\"y\"} (or \c{m} or \c{\"m\"} and modules are
+enabled). For example (see \l{#iface-func-ext-macro External Kconfig Macro
+Variables} for the more realistic version):
+
+\
+ENABLE_FANCY := y
+
+config IO
+        bool \"IO support\"
+
+config FANCY
+        bool \"Fancy options\"
+        depends on IO
+        depends on $(ENABLE_FANCY)
+\
+
+Terminals (symbol or value) can be compared for being equal/unequal
+less/greater, and less-or-equal/greater-or-equal. Finally, sub-expression can
+be grouped with parenthesis, negated, and combined with logical AND and
+OR. For example:
+
+\
+FALLBACK_NAME := ...
+
+config RETRY
+        int \"Max times to retry\"
+
+config NAME_ASK
+        bool \"Ask for name\"
+        depends on IO && (RETRY != 0 || \"$(FALLBACK_NAME)\" = \"\")
+\
+
+
+\h2#lang-option-helper|Helper Options|
+
+An option without a prompt or with a prompt that is disabled by \c{if
+\i{expr}} is invisible to the user. However, such an option can still take on
+the default value or be set by \c{select} and \c{imply}
+(\l{#lang-option-rev-dep Reverse Dependencies}) with the result still usable
+within the \c{Kconfig} file, for example, for other option's dependecies and
+accessible outside through the \c{kconfig.*} Buildfile variables. Such options
+are called \i{helper options}. For example:
+
+\
+choice
+        prompt \"Greeting\"
+        default GREETING_HELLO
+
+config GREETING_HELLO
+        bool \"\\\"Hello\\\"\"
+        select GREETING_BUILTIN
+
+config GREETING_HI
+        bool \"\\\"Hi\\\"\"
+        select GREETING_BUILTIN
+
+config GREETING_HOWDY
+        bool \"\\\"Howdy\\\"\"
+        select GREETING_BUILTIN
+
+config GREETING_CUSTOM
+        bool \"Custom greeting\"
+
+endchoice
+
+config GREETING_BUILTIN
+        bool
+\
+
+In this example \c{GREETING_BUILTIN} is a helper option that is set to true
+when one of the builtin gretting strings is selected. It can then be used
+as a dependency for another option, for example:
+
+\
+config PUNCT
+        string \"End of greeting punctuation\"
+        default \"!\"
+        depends on !GREETING_BUILTIN
+        help
+          Character for punctuating the end of the custom greeting
+          sentence.
+\
+
+Continuing with the above example, here is another option that becomes a
+helper if we are using one of the builin greeting strings:
+
+\
+config GREETING_TEXT
+        string \"Custom greeting\" if GREETING_CUSTOM
+        default \"Hello\" if GREETING_HELLO
+        default \"Hi\"    if GREETING_HI
+        default \"Howdy\" if GREETING_HOWDY
+        help
+          Custom string to use as a greeting.
+\
+
+The idea here is that now we have an option that contains the greeting string
+in both the builin and custom cases. As a result, instead of having to write
+something like this in our \c{buildfile}:
+
+\
+if $kconfig.hello.greeting_builtin
+{
+  if $kconfig.hello.greeting_hello
+    greeting = 'Hello'
+  elif $kconfig.hello.greeting_hi
+    greeting = 'Hi'
+  elif $kconfig.hello.greeting_howdy
+    greeting = 'Howdy'
+  else
+    fail 'unhandled builtin greeting'
+}
+else
+  greeting = $kconfig.hello.greeting_text
+\
+
+We can just have:
+
+\
+greeting = $kconfig.hello.greeting_text
+\
+
+\h#lang-menu|Menu (\c{menu})|
+
+\c{\b{menu} \i{prompt}\n
+\ \ \ \ \ \ \b{visible if} \i{expr}\n
+\ \ \ \ \ \ \b{depends on} \i{expr}\n
+...\n
+\b{endmenu}\n
+\n
+\b{menuconfig} \i{symbol}\n
+\ \ \ \ \ \ ...}
+
+Menues are used to organize options into a tree-like hierarchy as an aid to
+the user. Normally a menu would contain related options. If a menu contains a
+large number of options, then some of them can be organized into submenus and
+so on.
+
+The menu definition starts with the \c{menu} keyword followed by the menu
+prompt. Similar to an option, a menu may specify a number of attributes on the
+following lines. After the menu definition and before the matching \c{endmenu}
+keyword, any option, menu, etc., all belong to this menu and are collectively
+called \i{menu entries}. For example:
+
+\
+menu \"Basic options\"
+
+config IO
+        bool \"IO support\"
+        help
+          Enable stdin/stdout input/output. Note that if this option is
+          disabled, then you won't see any output.
+
+config PUNCT
+        string \"End of greeting punctuation\"
+        default \"!\"
+        help
+          Character for punctuating the end of the greeting sentence.
+
+endmenu
+\
+
+Similar to option prompts, menu prompts are presented to the user during
+option customization. For example:
+
+\
+$ b configure
+
+*
+* Basic options
+*
+IO support (IO) [N/y/?] (NEW) y
+End of greeting punctuation (PUNCT) [!] (NEW) !!!
+\
+
+The menu visibility can be controlled with the \c{visible\ if} attribute. If
+its expression evaluates to false, then neither the menu itself nor any of its
+entries are presented to the user. For example:
+
+\
+menu \"Fancy options\"
+        visible if IO
+
+...
+
+endmenu
+\
+
+Menu visibility is the extension of the option prompt visibility in that an
+option that belong to an invisible menu has the same semantics as if it had an
+invisible prompt (\l{#lang-option-prompt-help Prompt and Help}).
+
+Another attribute of a menu definition is \c{depends\ on}. Specifying this
+attribute is equivalent to specifying it in every option that belongs to this
+menu, recursively (\l{#lang-option-dep Dependencies}).
+
+The Kconfig menu hierarchy always starts with an implicitly-defined main menu.
+While it is possible to customize its prompt in the \c{Kconfig} file using the
+\c{mainmenu} definition, customarily it is set to the project name and version
+which the \c{kconfig} module does automatically. It can also be customized by
+setting the \c{kconfig.kconfig.title} variable in \c{root.build} before
+loading the \c{kconfig} module.
+
+\N|Specifying \c{mainmenu} in the \c{Kconfig} file is not recommended when
+used with \c{build2} because there can only be one such definition thus making
+the result non-composable. On the other hand, there are plans for the
+\c{kconfig} module to automatically aggregate Kconfig configurations of
+multiple projects into a single configurator invocation.|
+
+When organizing options into menus we often encounter a pattern where a
+configuration option enables a menu, for example:
+
+\
+config FANCY
+        bool \"Fancy options\"
+        help
+          Enable more fancy configuration options.
+
+menu \"Fancy options\"
+  depends on FANCY
+
+config GREETING
+        string \"Custom greeting\"
+        help
+          Custom string to use as a greeting.
+
+config NAME_ASK
+        bool \"Ask for name\"
+        depends on IO
+        help
+          Ask for the name to greet if it is unspecified on the
+          command line.
+endmenu
+\
+
+Regardless of how we structure this (option outside or inside the menu), the
+user interface will have a separate entry for the option and the menu while
+what we want here is to combine them. To achieve this we use the
+\c{menuconfig} hybrid menu/option. For example:
+
+\
+menuconfig FANCY
+        bool \"Fancy options\"
+        help
+          Enable more fancy configuration options.
+
+if FANCY
+
+config GREETING
+        string \"Custom greeting\"
+        ...
+
+config NAME_ASK
+        bool \"Ask for name\"
+        depends on IO
+        ...
+
+endif
+\
+
+The \c{menuconfig} definition has the same semantics and attributes as
+\c{config} but additionally establishes a submenu and treats all the following
+entries (options, menus) that have a dependency on its symbols as submenu
+entries until encountering the first entry without such a dependency. The
+common approach to establish such a dependency is to use the \c{if}-block as
+in the example above.
+
+\N|If you are wondering why \c{menuconfig} does not use an explicit end marker
+similar to \c{endmenu}, you are not alone. It is probably a remnant of the
+automatic menu generation described next.|
+
+Even if we didn't use \c{menuconfig} in the above example, Kconfig would
+analyze the dependency relationship and generate a menu-like structure
+automtically. Specifically, all the immediately following entries that have a
+dependency on the preceding option are treated as its sub-entries and
+displayed as beloning to this option. What \"displayed as beloning\" means,
+exactly, depends on the configurator and in some it may be indistinguishable
+from \c{menuconfig}.
+
+
+\h#lang-choice|Choice (\c{choice})|
+
+\c{\b{choice} [\i{symbol}]\n
+\ \ \ \ \ \ \b{optional}\n
+\ \ \ \ \ \ \b{default} \i{symbol} [\b{if} \i{expr}]\n
+\ \ \ \ \ \ ...\n
+...\n
+\b{endchoice}}
+
+
+Choices are used to restrict the selection to the at most one option. In a
+way, they can be viwed as a variant of the menu construct but where instead
+of all the options the user can only select one.
+
+The choice definition starts with the \c{choice} keyword optionally followed
+by the choice name. Similar to options and menus, a choice may specify a
+number of attributes on the following lines. After the choice definition and
+before the matching \c{endchoice} keyword comes a number of options (normally
+two or more) collectively called \i{choice options}. Choice options can only
+be of type \c{bool} and \c{tristate}. For example:
+
+\
+choice
+        prompt \"Greeting\"
+        default GREETING_HELLO
+        help
+          String to use as a greeting.
+
+config GREETING_HELLO
+        bool \"\\\"Hello\\\"\"
+        select GREETING_BUILTIN
+
+config GREETING_HI
+        bool \"\\\"Hi\\\"\"
+        select GREETING_BUILTIN
+
+config GREETING_HOWDY
+        bool \"\\\"Howdy\\\"\"
+        select GREETING_BUILTIN
+
+config GREETING_CUSTOM
+        bool \"Custom greeting\"
+
+endchoice
+\
+
+Given the above choice, the user could be presented with the following
+interface:
+
+\
+$ b configure
+
+Greeting
+> 1. \"Hello\" (GREETING_HELLO) (NEW)
+  2. \"Hi\" (GREETING_HI) (NEW)
+  3. \"Howdy\" (GREETING_HOWDY) (NEW)
+  4. Custom greeting (GREETING_CUSTOM) (NEW)
+choice[1-4?]:
+\
+
+\N|Choices with \c{tristate} options allow selecting multiple options provided
+they are all set to \c{m}. See \l{#lang-mod Modularity Support} for details.|
+
+Two commonly used choice attributes are \c{default} and \c{optional}. The
+\c{default} attribute is used to specify the default selection as shown in the
+example above. The \c{optional} attribute makes the choice optional allowing
+the user not to select any of the choice options.
+
+\N|A non-optional choice without a default value will currently result in an
+invalid configuration if configuring non-interactively using the default
+values (\c{config.kconfig=def}). As a result, it is recommended to always
+specify default values for non-optional choices.|
+
+A choice definition can specify any of the other configuration option
+attributes, however, not all of them make sense in all situations. In
+practice, there are two common patterns of choice usage: a simple choice
+without a name and an optional choice with a name. Here is the overall
+structure of the first pattern (which is also used in the above example):
+
+\
+choice
+        prompt \"Prompt text\"
+        default DEFAULT_OPTION
+
+...
+
+endchoice
+\
+
+In the second pattern, the optional choice is given a name that is used as a
+helper (\l{#lang-option-helper Helper Options}) to determine whether any of
+the choice options were selected. Such a choice may or may not have the
+default value. Here is its overall structure:
+
+\
+choice CHOICE_NAME
+       bool \"Prompt text\"
+       optional
+       default DEFAULT_OPTION
+
+...
+
+endchoice
+\
+
+And here is a concrete example of such a choice:
+
+\
+choice NAME_FALLBACK
+       bool \"Name fallback\"
+       optional
+       help
+         Fallback name to use if it is unspecified on the command line.
+
+config NAME_ASK
+        bool \"Ask for name\"
+        depends on IO
+        help
+          Ask for the name to greet if it is unspecified on the
+          command line.
+
+config NAME_DEF
+        bool \"Use default name\"
+        help
+          Use the default name to greet if it is unspecified on the
+          command line.
+
+endchoice
+\
+
+At the Buildfile level we can then use \c{config.<project>.name_fallback} to
+determine if any of the choice options were selected, for example:
+
+\
+if $config.hello.name_fallback
+{
+  if $config.hello.name_ask
+    ...
+
+  if $config.hello.name_def
+    ...
+}
+\
+
+\h#lang-comment|Comment (\c{comment})|
+
+\c{\b{comment} \i{prompt}\n
+\ \ \ \ \ \ \b{depends on} \i{expr}}
+
+A comment is used to add a notice to the user during configuration. It is also
+written into the resulting configuration file.
+
+The comment definition starts with the \c{comment} keyword followed by the
+comment prompt (text). For example:
+
+\
+comment \"IO disabled, no output will be shown\"
+        depends on !IO
+\
+
+Similar to other entries, a comment may specify a number of attributes on the
+following lines. Currently the only valid comment attribute is \c{depends\ on}
+which can be used to make a comment conditional, a shown in the example above.
+
+
+\h#lang-source|Source (\c{source})|
+
+\c{\b{source} \i{path}\n
+\n
+\i{path} = \i{string}}
+
+The source definition is used to source (include) one \c{Kconfig} file into
+another. It starts with the \c{source} keyword followed by the path string.
+
+For example, if you would like your \c{Kconfig} file to reside in the root
+directory of your project (which is customary in several projects that use
+Kconfig, including the Linux kernel), then you can place the following line in
+your \c{build/Kconfig} and then write the rest of the definitions in the
+root \c{Kconfig}:
+
+\
+source \"$(SRC_ROOT)/Kconfig\"
+\
+
+As mentioned in \l{#iface-func-ext-macro External Kconfig Macro Variables},
+\c{SRC_ROOT} is the pre-defined variable that contains the project's source
+root directory (the same as \c{src_root} in \c{buildfiles}). It should
+normally be used as base for all your source defintions.
+
+\N|While we can specify a relative path to source, the historic Kconfig
+semantics is to first try to open such a path relative to the current working
+directory. Since \c{build2} does not assume any particular current working
+directory, the use of absolute paths based on \c{SRC_ROOT} is strongly
+recommended.
+
+Note also that on Windows all Kconfig paths use forward slashes as directory
+separators, including the \c{SRC_ROOT} macro variable. You should also use the
+forward slahses when forming paths based on \c{SRC_ROOT}, as in the above
+example.|
+
+As another example, consider the following \c{Kconfig} fragment which is
+commonly misunderstood:
+
+\
+if IO
+source \"$(SRC_ROOT)/build/Kconfig-io\"
+endif
+\
+
+This is not a conditional inclusion. Rather, it is an unconditional inclusion
+with all the definitions inside \c{Kconfig-io} now depending on \c{IO}
+(\l{#lang-option-dep Dependencies}).
+
+There is no conditional inclusion in Kconfig nor, more generally, any ability
+to conditionally exclude a fragment of the \c{Kconfig} file. The closest we
+can get is probably a conditional selection of the file to source based on
+the external macro variable. For example, in our \c{root.build} we could
+have the following fragment:
+
+\
+using cxx
+
+Kconfig.PLATFORM = $cxx.target.class
+
+using kconfig
+\
+
+And then in the \c{Kconfig} file write the following which would include
+\c{Kconfig-linux}, \c{Kconfig-windows}, etc., depending on the platform
+we are targeting:
+
+\
+source \"$(SRC_ROOT)/build/Kconfig-$(PLATFORM)\"
+\
+
+Note also that if you are using this technique, then you will need to
+explicitly mention such \c{Kconfig-*} files as prerequsites in a \c{buildfile}
+in order for them to be included into the distribution. For example, in your
+root \c{buildfile} you could have:
+
+\
+./: ... build/file{Kconfig-*}
+\
+
+
+\h#lang-macro|Macro Language|
+
+The Kconfig language provides support for \c{make}-like macro substituion.
+Conceptually, there are two languages layered one on top of the other: the
+bottom layer is the macro language that perform plain textual substitutions.
+The result is then used as input to the top layer, which is the Kconfig
+defintion language. For example:
+
+\
+DEFAULT_GREETING := Hey there
+
+config GREETING
+        string \"Custom greeting\"
+        default \"$(DEFAULT_GREETING)\"
+\
+
+After the macro substitution, the top layer will see:
+
+\
+config GREETING
+        string \"Custom greeting\"
+        default \"Hey there\"
+\
+
+Macro expansions can appear in pretty much any context, including prompts,
+default values, expressions, and so on. It is, however, important to keep in
+mind that macro variable names and option names/symbols operate in different
+languages. In particular, while a macro variable can contain an option name
+(symbol) it cannot contain an \"expansion\" (that is, a value) of an option.
+For example, the following does not make sense:
+
+\
+GREETING_VALUE = $(GREETING)
+
+config GREETING
+        string \"Custom greeting\"
+        default \"Hello\"
+\
+
+\N|While this conceptual model is helpful as an understanding aid, this is not
+exactly how the implementation works and there are some restrictions.
+Specifically, Kconfig keywords cannot be the result of the macro substitution
+nor can substitutions span multiple Kconfig tokens. Refere to the official
+\l{https://www.kernel.org/doc/html/latest/kbuild/kconfig-macro-language.html
+Kconfig Macro Language} documentation for details.|
+
+Macro variables can only be assigned at the beginning of a \c{Kconfig} file
+before any Kconfig definitions (options, menus, etc). Similar to \c{make},
+there is no need to quote values in macro variable assignment unless we want
+the value to contain literal quotes. For example, this version is equivalent
+to the above:
+
+\
+DEFAULT_GREETING := \"Hey there\"
+
+config GREETING
+        string \"Custom greeting\"
+        default $(DEFAULT_GREETING)
+\
+
+During substitution, the corresponding variable assignment is first looked up
+in the \c{Kconfig} file. If not found, then the value is looked up in the
+\c{Kconfig.*} Buildfile variables with \c{SRC_ROOT} being the only pre-defined
+variable (see \l{#iface-func-ext-macro External Kconfig Macro Variables} for
+details). For example, instead of setting \c{DEFAULT_GREETING} in the
+\c{Kconfig} file as above, we could set it from \c{root.build}:
+
+\
+Kconfig.DEFAULT_GREETING = '\"Hey there\"'
+
+using kconfig
+\
+
+As another example, we can pass the platform we are targeting as a macro
+variable:
+
+\
+using cxx
+
+Kconfig.PLATFORM = $cxx.target.class
+
+using kconfig
+\
+
+And then use it in \c{Kconfig} to conditionally enable options, choose their
+default values, and so on:
+
+\
+config IO
+        bool \"IO support\"
+        depends on \"$(PLATFORM)\" != \"windows\"
+
+config GREETING
+        string \"Custom greeting\"
+        default \"Hey\" if \"$(PLATFORM)\" = \"linux\"
+        default \"Hello\"
+
+comment \"Targeting $(PLATFORM)\"
+\
+
+An undefined variable substitution is an error. Note also that due to the
+two-layer textual substitution semantics all variable references are always
+substituted. For example:
+
+\
+config GREETING
+        string \"Custom greeting\"
+        default $(DEFAULT_GREETING_IO) if IO
+        default $(DEFAULT_GREETING) if !IO
+\
+
+In this example, both \c{DEFAULT_GREETING} \c{DEFAULT_GREETING_IO} must always
+be defined regardless of which default value is (later) used.
+
+Similar to \c{make}, Kconfig supports both simple and recursively-expanding
+variables with the latter used as a building block to support functions. For
+details, refere to the official
+\l{https://www.kernel.org/doc/html/latest/kbuild/kconfig-macro-language.html
+Kconfig Macro Language} documentation.
+
+\N|The use of the builtin \c{shell} function in the context of \c{build2} is
+not recommended since it will most likely result in portability issues and
+poor performance.|
+
+
+\h#lang-mod|Modularity Support|
+
+The Kconfig language provides support for configuration options that besides
+being enabled (\c{y}) or disabled (\c{n}) can also be enabled as a module
+(\c{m}).
+
+\N|While it may be tempting to try to repurpose this support for something
+similar but not quite the same, modularity in Kconfig is fairly purpose-built
+for the Linux kernel needs and straying too far from its indended semantics
+will probably result in a poor experience.|
+
+The central part in this functionality is the \c{tristate} type which in
+addition to the \c{bool}'s \c{y} and \c{n} states has the third \c{m} state.
+The availability of this third state is also gated by the specially-designated
+\c{bool} option that determines whether overall modules support is
+enabled. Similarly, in expressions (\l{#lang-option-expr Expressions}) \c{m}
+is equivalent to \c{y} only if modules are enabled. For example:
+
+\
+config MODULES
+       bool \"Modules support\"
+       option modules
+
+config IO
+       tristate \"IO support\"
+\
+
+In the above example, \c{MODULES} is designated as the modules option with the
+\c{option} attribute. If we answer \c{y} to \c{MODULES}, then for \c{IO} we
+will be able to choose between \c{y}, \c{m}, and \c{n}. However, if
+\c{MODULES} is \c{n}, then our choice for \c{IO} will be between \c{y} and
+\c{n}:
+
+\
+$ b configure
+
+Modules support (MODULES) [Y/n/?] (NEW) y
+IO support (IO) [N/m/y/?] (NEW)
+
+$ b configure
+
+Modules support (MODULES) [Y/n/?] (NEW) n
+IO support (IO) [N/y/?] (NEW)
+\
+
+If we want to unconditionally enable modules in our project, then we can make
+the \c{MODULES} option promptless with \c{y} default, for example:
+
+\
+config MODULES
+       bool
+       default y
+       option modules
+\
+
+\N|Only one configuration option can be designated as the module option. This
+makes it difficult to compose project configuration that use this
+functionality.|
+
+Besides normally options, \c{tristate} can also be used in choices. Such a
+choice allows the user to select only one option as \c{y} but more than one as
+\c{m} (again, provided modules are enabled). For example:
+
+\
+choice
+        prompt \"Name fallback\"
+
+config NAME_ASK
+        tristate \"Ask for name\"
+        help
+          Ask for the name to greet if it is unspecified on the
+          command line.
+
+config NAME_DEF
+        tristate \"Use default name\"
+        help
+          Use the default name to greet if it is unspecified on the
+          command line.
+
+endchoice
+\
+
+\h#lang-back-compat|Backwards Compatibility|
+
+It is typical and well supported to reuse an old configuration when upgrading
+to a new version of the project (see \l{#iface-func-conf-method Configuration
+Methods} for details). As a result, when evolving a project that uses Kconfig,
+it makes sense to keep backwards compatibility in mind.
+
+Besides a \i{full} old configuration, users of our project can also keep
+\i{minimal} default configurations produced with \c{kconfig-conf
+--savedefconfig}. Unlike the full configuration which contains all the values,
+default configurations only contains values that differ from the defaults.
+Based on this understanding, these changes normally lead to reasonable
+backwards compatibility:
+
+\ul|
+
+\li|Adding new or removing/renaming existing options.|
+
+\li|Moving options around or organizing them into submenus.|
+
+\li|Changing dependencies and visibility of existing options, menus, etc.|
+
+\li|Changing prompt or help of existing options, menus, etc.|
+
+|
+
+In contrast, these changes should normally be avoided:
+
+\ul|
+
+\li|Changing type of existing options.|
+
+\li|Changing default value or range of existing options.|
+
+\li|Removing existing options from non-optional choices that do not specify
+    a default value.|
+
+|
+
+"
