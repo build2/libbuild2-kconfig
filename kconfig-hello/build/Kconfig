@@ -1,79 +1,100 @@
-comment "$(PROJECT) $(VERSION)"
+menu "Basic options"
 
-comment "$(SRC_ROOT)"
+config IO
+        bool "IO support"
+        default y
+        help
+          Enable stdin/stdout input/output. Note that if this option is
+          disabled, then you won't see any output.
 
-config FOO
-	bool "Foo support"
-	help
-	  This enables compilation of foo. It is an example of a random
-	  component of a project.
+comment "IO disabled, no output will be shown"
+        depends on !IO
 
-config BAR
-	bool "Bar support"
-	help
-	  This enables compilation of the feature bar.
-
-config BAZ
-	bool "Baz support"
-	depends on BAR
-	help
-	  This enables baz. It demos dependency annotations.
-
-config ALPHA
-	bool "Alpha support"
-	default y
-	help
-	  This enables alpha. An example directory depenency.
-
-menu "Values"
-
-config INT
-	int "Integer value"
-	default 4321
-	help
-	  This is some integer value.
-
-config HEX
-	hex "Hex value"
-	default 0xdeadbeef
-	help
-	  This is some hex value.
-
-config STR
-	string "String value"
-	default "Hello from STR"
-	help
-          This is some string value.
-
-config STR_HELPER
-	string
-	default "$(VERSION)" if ALPHA
+config PUNCT
+        string "End of greeting punctuation"
+        default "!"
+        help
+          Character for punctuating the end of the greeting sentence.
 
 endmenu
 
-# Choice.
+
+menuconfig FANCY
+        bool "Fancy options"
+	default y
+        depends on $(ENABLE_FANCY)
+        help
+          Enable more fancy configuration options.
+
+if FANCY
+
+# GREETING_*
 #
-config HAVE_COMPRESSION
-	bool
+choice
+        prompt "Greeting"
+        default GREETING_HELLO
+        help
+          String to use as a greeting.
 
-choice COMPRESSION_CHOICE
-	prompt "Compression tool"
-	optional
+config GREETING_HELLO
+        bool "\"Hello\""
+        select GREETING_BUILTIN
 
-config GZIP
-	bool "Use gzip"
-	select HAVE_COMPRESSION
+config GREETING_HI
+        bool "\"Hi\""
+        select GREETING_BUILTIN
 
-config BZIP2
-	bool "use bzip2"
-	select HAVE_COMPRESSION
+config GREETING_HOWDY
+        bool "\"Howdy\""
+        select GREETING_BUILTIN
+
+config GREETING_CUSTOM
+        bool "Custom greeting"
 
 endchoice
 
-# Comment.
-#
-comment "Using gzip"
-	depends on GZIP
+config GREETING_BUILTIN
+        bool
 
-comment "Using bzip2"
-	depends on BZIP2
+comment "Using builtin greeting string"
+        depends on GREETING_BUILTIN
+
+config GREETING_TEXT
+        string "Custom greeting" if GREETING_CUSTOM
+        default "Hello" if GREETING_HELLO
+        default "Hi"    if GREETING_HI
+        default "Howdy" if GREETING_HOWDY
+        help
+          Custom string to use as a greeting.
+
+# NAME_*
+#
+choice NAME_FALLBACK
+       bool "Name fallback"
+       optional
+       help
+         Fallback name to use if it is unspecified on the command line.
+
+config NAME_ASK
+        bool "Ask for name"
+        depends on IO
+        help
+          Ask for the name to greet if it is unspecified on the command line.
+
+config NAME_DEF
+        bool "Use default name"
+        help
+          Use the default name to greet if it is unspecified on the command
+          line.
+
+endchoice
+
+config NAME_ASK_MAX
+        int "Max times to ask for name"
+        default 5
+        range 1 10
+        depends on NAME_ASK
+        help
+          Maximum number of times to ask for the name to greet.
+
+endif # menuconfig FANCY

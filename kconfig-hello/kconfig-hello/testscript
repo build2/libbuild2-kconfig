@@ -1,0 +1,19 @@
+: io
+:
+: Tests that require IO support.
+:
+if $kconfig.kconfig_hello.io
+{
+  : basics
+  :
+  $* 'World' >'Hello, World!'
+
+  : missing-name
+  :
+  if! $kconfig.kconfig_hello.name_fallback
+  {
+    $* 2>>EOE != 0
+    error: missing name
+    EOE
+  }
+}

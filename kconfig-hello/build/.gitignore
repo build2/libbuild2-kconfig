@@ -1,4 +1,5 @@
-config.build
-config.kconfig*
-root/
-bootstrap/
+/config.build
+/config.kconfig*
+/root/
+/bootstrap/
+build/

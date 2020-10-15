@@ -1,0 +1,6 @@
+kconfig-hello
+config.hxx
+
+# Testscript output directory (can be symlink).
+#
+test-kconfig-hello

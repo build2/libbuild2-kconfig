@@ -1,0 +1,18 @@
+#pragma once
+
+// Basic options.
+//
+#define IO     $kconfig.kconfig_hello.io$
+#define PUNCT  "$kconfig.kconfig_hello.punct$"
+
+// Fancy options.
+//
+#define FANCY  $kconfig.kconfig_hello.fancy$
+
+#define GREETING_BUILTIN $kconfig.kconfig_hello.greeting_builtin$
+#define GREETING_TEXT    "$kconfig.kconfig_hello.greeting_text$"
+
+#define NAME_FALLBACK $kconfig.kconfig_hello.name_fallback$
+#define NAME_ASK      $kconfig.kconfig_hello.name_ask$
+#define NAME_DEF      $kconfig.kconfig_hello.name_def$
+#define NAME_ASK_MAX  $kconfig.kconfig_hello.name_ask_max$

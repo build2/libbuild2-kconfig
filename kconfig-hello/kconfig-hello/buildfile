@@ -1,0 +1,13 @@
+exe{kconfig-hello}: {hxx ixx txx cxx}{** -io -config} hxx{config} testscript
+exe{kconfig-hello}: {hxx cxx}{io}: include = $kconfig.kconfig_hello.io
+
+hxx{config}: in{config}
+{
+  # Note that if some non-bool options are disabled (for example, via `depends
+  # on`), then the corresponding kconfig.* variables will be NULL. So we
+  # instruct the `in` rule to substiute empty string for such values.
+  #
+  in.null = ''
+}
+
+cxx.poptions =+ "-I$out_root" "-I$src_root"

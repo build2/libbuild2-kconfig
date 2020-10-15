@@ -1,16 +1,29 @@
+# This first-level configuration variable can be used to disable the fancy
+# options menu in the second-level Kconfig configuration.
+#
+config [bool] config.kconfig_hello.fancy ?= true
 
-if ($build.meta_operation != 'info' && $build.meta_operation != 'dist')
-{
-  Kconfig.PROJECT = $project
-  Kconfig.VERSION = $version
-  Kconfig.TEST = foobar
-  Kconfig.PATH = [path] $src_root/manifest
-  Kconfig.DIR = [dir_path] $out_root
+# By default use default values from the Kconfig file.
+#
+kconfig.kconfig.configure = new-def
+kconfig.kconfig.reconfigure = old-def
+kconfig.kconfig.transient = def
 
-  kconfig.kconfig.configure = new-def $src_root/build/defconfig.kconfig
-  kconfig.kconfig.transient = new-def $src_root/build/defconfig.kconfig
+Kconfig.ENABLE_FANCY = $config.kconfig_hello.fancy
 
-  using kconfig
+using kconfig
 
-  assert $kconfig.alpha "need alpha"
-}
+using in
+
+cxx.std = latest
+
+using cxx
+
+hxx{*}: extension = hxx
+ixx{*}: extension = ixx
+txx{*}: extension = txx
+cxx{*}: extension = cxx
+
+# The test target for cross-testing (running tests under Wine, etc).
+#
+test.target = $cxx.target
