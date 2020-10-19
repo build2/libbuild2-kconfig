@@ -29,7 +29,7 @@ if ($cli != [null])
   {
     dist  = true
     clean = ($src_root != $out_root)
-    backlink = true
+    backlink = copy
   }
   {{
     diag cli $> : ($<[0]) # @@ TMP: revise
