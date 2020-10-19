@@ -17,3 +17,8 @@
 *.exe.dlls/
 *.exe.manifest
 *.pc
+
+# Testscript output directories (can be symlinks).
+#
+test
+test-*
