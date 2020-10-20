@@ -5,7 +5,7 @@ hxx{config}: in{config}
 {
   # Note that if some non-bool options are disabled (for example, via `depends
   # on`), then the corresponding kconfig.* variables will be NULL. So we
-  # instruct the `in` rule to substiute empty string for such values.
+  # instruct the `in` rule to substitute empty string for such values.
   #
   in.null = ''
 }
