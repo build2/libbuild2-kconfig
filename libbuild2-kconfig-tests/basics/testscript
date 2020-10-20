@@ -2,6 +2,13 @@
 #
 test.options += --no-default-options --serial-stop --silent --buildfile -
 
+# We disable bdep auto-synchronization since we will potentially be updating
+# the module from multiple parallel tests. Note that we've made sure it is
+# up-to-date by pre-loading it in the tests project (see bootstrap.build for
+# details).
+#
+# @@ Would be nice to set BDEP_SYNC=0 once for the entire scope.
+
 +cat <<EOI >=bootstrap.build
   project = basics
   amalgamation =
@@ -33,7 +40,7 @@ test.options += --no-default-options --serial-stop --silent --buildfile -
 :
 mkdir build;
 ln -s ../../bootstrap.build ../../root.build ../../Kconfig build/;
-$* noop <<EOI >>EOO
+env BDEP_SYNC=0 -- $* noop <<EOI >>EOO
   print $kconfig.basics.foo
   print $kconfig.basics.bar
   print $kconfig.basics.baz
@@ -72,7 +79,7 @@ cat <<EOI >=defconfig.kconfig;
   # CONFIG_FOO is not set
   CONFIG_BAR=y
   EOI
-$* configure config.kconfig="old-def defconfig.kconfig" <'./:' &build/config.build &build/config.kconfig.old;
+env BDEP_SYNC=0 -- $* configure config.kconfig="old-def defconfig.kconfig" <'./:' &build/config.build &build/config.kconfig.old;
 cat build/config.kconfig >>EOO
   #
   # Automatically generated file; DO NOT EDIT.
@@ -91,7 +98,7 @@ ln -s ../Kconfig ./;
 cat <<EOI >=build/Kconfig;
   source "$(SRC_ROOT)/Kconfig"
   EOI
-$* noop <<EOI >>EOO
+env BDEP_SYNC=0 -- $* noop <<EOI >>EOO
   print $kconfig.basics.foo
   print $kconfig.basics.bar
   print $kconfig.basics.baz
@@ -110,7 +117,7 @@ ln -s ../../bootstrap.build ../../root.build build/;
 cat <<EOI >=build/Kconfig;
   source "$(SRC_ROOT)/Kconfig"
   EOI
-$* noop <'' 2>>~%EOE% != 0
+env BDEP_SYNC=0 -- $* noop <'' 2>>~%EOE% != 0
   %.+/source-error/build/Kconfig:1: can't open file ".+/source-error/Kconfig"%
   EOE
 
@@ -121,7 +128,7 @@ ln -s ../../bootstrap.build ../../root.build build/;
 cat <<EOI >=build/Kconfig;
   source abc
   EOI
-$* noop <'' 2>>~%EOE% != 0
+env BDEP_SYNC=0 -- $* noop <'' 2>>~%EOE% != 0
   %.+/Kconfig:2: syntax error%
   %.+/Kconfig:1: invalid statement%
   EOE
@@ -133,6 +140,6 @@ ln -s ../../bootstrap.build ../../root.build ../../Kconfig build/;
 cat <<EOI >=build/config.kconfig;
   JUNK
   EOI
-$* configure config.kconfig=def <'./:' 2>>~%EOE% &build/config.build &build/config.kconfig.old
+env BDEP_SYNC=0 -- $* configure config.kconfig=def <'./:' 2>>~%EOE% &build/config.build &build/config.kconfig.old
   %.+/build/config.kconfig.new:1: warning: unexpected data: JUNK%
   EOE

@@ -1,3 +1,10 @@
 # @@ Should we be able to do just test = $build.path?
 #
 testscript{*}: test = $recall($build.path)
+
+# See bootstrap.build for details.
+#
+kconfig.kconfig.configure = new-def
+kconfig.kconfig.reconfigure = new-def
+kconfig.kconfig.retryconfigure = new-def
+kconfig.kconfig.transient = def
