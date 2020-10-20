@@ -1285,8 +1285,8 @@ namespace build2
 
           // Enter variable.
           //
-          // @@ The kconfig module could define the tristate type if there use
-          //    for it.
+          // @@ The kconfig module could define the tristate type if there is
+          //    use for it. Would be neat to derive it from bool somehow.
           //
           const value_type* var_t (nullptr);
           if (var_q)
@@ -1294,7 +1294,7 @@ namespace build2
             switch (s->type)
             {
             case S_BOOLEAN:  var_t = &value_traits<bool>::value_type;     break;
-            case S_TRISTATE: var_t = /* untyped */ nullptr;               break;
+            case S_TRISTATE: var_t = &value_traits<string>::value_type;   break;
             case S_INT:      var_t = &value_traits<int64_t>::value_type;  break;
             case S_HEX:      var_t = &value_traits<uint64_t>::value_type; break;
             case S_STRING:   var_t = &value_traits<string>::value_type;   break;
