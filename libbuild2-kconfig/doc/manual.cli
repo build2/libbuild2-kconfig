@@ -143,8 +143,9 @@ configuration system to configure \c{build2} projects. Specifically, it
 integrates the execution of one of the Kconfig configurators into the
 \c{build2} \c{configure} meta-operation and loads the resulting configuration
 file presenting its values as \c{kconfig.*} \c{build2} variable values. We can
-then use these \c{kconfig.*} values to make decision in \c{buildfiles} and/or
-propagate them to our source code, similar to \c{config.*} values.
+then use these \c{kconfig.*} values to make decisions in \c{buildfiles},
+\c{testscripts}, and/or propagate them to our source code, similar to
+\c{config.*} values.
 
 As an example, let's see what it takes to add the Kconfig configuration shown
 in the previous section to a simple \c{build2} project. As a first step, let's
@@ -246,7 +247,27 @@ libhello/buildfile:2:1: info: greeting: Hi
 are the same as what's shown in \l{b#proj-config Project Configuration} and
 the same mechanisms for post-processing and propagating configuration values
 apply here; in most examples from that chapter you can simply replace
-\c{config.libhello.*} with \c{kconfig.libhello.*}.|
+\c{config.libhello.*} with \c{kconfig.libhello.*}.
+
+Note, however, that if a non-bool option is disabled (for example, because its
+dependencies are unsatisfied), then the corresponding \c{kconfig.*} variable
+will be \c{null}. At the same time, the \l{b#module-in \c{in} module} treats a
+\c{null} substitution as an error unless a fallback value is specified with
+the \c{in.null} variable. As a result, if non-bool \c{kconfig.*} variables are
+used in the \c{.in} file substitutions, then it's a good idea to specify the
+fallback, for example:
+
+\
+h{config}: in{config}
+{
+  # Instruct the in rule to substitute empty string for null values.
+  #
+  in.null = ''
+}
+\
+
+See \l{https://cppget.org/kconfig-hello \c{kconfig-hello}} for a complete
+example.|
 
 Analogous to \c{configure}, the standard \c{disfigure} meta-operation also
 remove the Kconfig configuration, or, more precisely, moves it to
@@ -1003,6 +1024,19 @@ Buildfile type.\n\n|
 Like \c{bool} but with an extra state (\c{m}) used to express modularity. See
 \l{#lang-mod Modularity Support} for details on this functionality.\n\n||
 
+\N|The \c{kconfig.*} variables are overridable which means, similar to the
+first-level configuration, we can temporarily tweak the Kconfig configuration
+(as seen by \c{buildfiles}) without reconfiguring the project. For example:
+
+\
+$ b kconfig.hello.io=false
+\
+
+Note, however, that such changes do not go through the usual Kconfig
+processing which, in particular, means no option dependency resolution is
+performed. As a result, care must be taken not to end up with an invalid
+configuration.|
+
 The default value for a configuration option can be specified with the
 \c{default} attribute. For example:
 
@@ -1044,7 +1078,8 @@ config NAME_ASK_MAX
 \b{endif}}
 
 The \c{depends\ on} attribute is used to specify a dependency of one option on
-another. For example:
+another. Collectively, dependencies determine what configurations are valid.
+For example:
 
 \
 config IO
@@ -1059,7 +1094,7 @@ If an option's dependency is not satisfied, then the option becomes
 \i{disabled}: the user is not prompted for its value and its default value is
 not used. For \c{bool} and \c{tristate}, the disabled option is set to \c{n}.
 For other types, disabled option's value is not set and the corresponding
-\c{kconfig.*} variable is \c{[null]}.
+\c{kconfig.*} variable is \c{null}.
 
 The \c{depends\ on} attribute can also be used to specify a dependency on an
 expression involving more than one option or non-boolean options (see
@@ -1868,10 +1903,14 @@ being enabled (\c{y}) or disabled (\c{n}) can also be enabled as a module
 \N|While it may be tempting to try to repurpose this support for something
 similar but not quite the same, modularity in Kconfig is fairly purpose-built
 for the Linux kernel needs and straying too far from its indended semantics
-will probably result in a poor experience.|
+will likely result in a poor experience.|
 
 The central part in this functionality is the \c{tristate} type which in
 addition to the \c{bool}'s \c{y} and \c{n} states has the third \c{m} state.
+When converted to the \c{kconfig.*} variables, \c{tristate} is mapped to
+the \c{string} Buildfile type with the \c{true}, \c{false}, and \c{module}
+possible values.
+
 The availability of this third state is also gated by the specially-designated
 \c{bool} option that determines whether overall modules support is
 enabled. Similarly, in expressions (\l{#lang-option-expr Expressions}) \c{m}

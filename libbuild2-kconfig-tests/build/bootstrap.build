@@ -4,3 +4,9 @@ using version
 using config
 using test
 using dist
+
+# Load the module (with a dummy/empty configuration) to make sure it is
+# up-to-date before we start running the tests. Failed that, we may try to
+# update it from multiple tests in parallel.
+#
+using kconfig
