@@ -1,6 +1,7 @@
 #include <libbuild2/kconfig/init.hxx>
 
 #include <cstring> // strcmp() strlen()
+#include <iomanip> // left, setw()
 
 #include <libbuild2/file.hxx>
 #include <libbuild2/scope.hxx>
@@ -1112,6 +1113,141 @@ namespace build2
       extra.init = module_boot_init::after;
     }
 
+    // Return true if this is a "real" symbol that we need to convert to the
+    // kconfig.* value, report, etc.
+    //
+    static inline bool
+    real_symbol (const symbol* s)
+    {
+      // Skip symbols corresponding to symbol-less choices (NULL names).
+      //
+      // Skip unknown types. There seems to be two kind of symbols that
+      // appear to have the unknown type:
+      //
+      // 1. Symbols that are referenced (e.g., in `depends on`) but not
+      //    defined.
+      //
+      // 2. Some sort of non-const values (typically integers).
+      //
+      // Skip constants (their names are the same as the value).
+      //
+      if (s->name == nullptr   ||
+          s->type == S_UNKNOWN ||
+          (s->flags & SYMBOL_CONST) != 0)
+        return false;
+
+      // Notes on symbols that don't have the SYMBOL_WRITE flags:
+      //
+      // 1. Almost all of them have false/NULL value. The one exception we
+      //    have seen (DEFCONFIG_LIST) had the SYMBOL_NO_WRITE flag.
+      //
+      assert (s->flags & SYMBOL_VALID);
+
+      return true;
+    }
+
+    // Recursively print the report in menu order/hierarchy. Return the number
+    // of real symbols seen (used for the consistency check).
+    //
+    static size_t
+    report (menu* m, diag_record& dr, size_t pad, size_t lev = 0)
+    {
+      size_t n (0);
+      bool nest (false);
+
+      // This is based on the logic found in kconfig-conf's conf() function.
+      //
+      if (const property* p = m->prompt)
+      {
+        switch (p->type)
+        {
+        case P_MENU:
+          {
+            // Skip the root menu (which is normally the project name and
+            // version).
+            //
+            // Note also that this can be menuconfig in which case we will
+            // have both the menu line and the symbol line.
+            //
+            if (m != &rootmenu && p->text != nullptr)
+            {
+              dr << "\n  " << string (lev * 2, ' ') << '>' << p->text;
+              nest = true;
+            }
+            break;
+          }
+        case P_COMMENT:
+          {
+            if (p->text != nullptr && menu_is_visible (m))
+            {
+              dr << "\n  " << string (lev * 2, ' ') << '|' << p->text;
+            }
+            break;
+          }
+        default:
+          break;
+        }
+      }
+
+      if (symbol* s = m->sym)
+      {
+        if (!real_symbol (s))
+          goto children;
+
+        n++;
+
+        // Let's omit printing NULL values (see init() below for details).
+        //
+        if (s->type != S_BOOLEAN && s->type != S_TRISTATE &&
+            !(s->flags & SYMBOL_WRITE) && !(s->flags & SYMBOL_NO_WRITE))
+          goto children;
+
+        // Nesting choices doesn't seem worth it: most of them will have no
+        // symbol and one true arm. We also don't nest implicit menuconfig
+        // symbols. So nesting is determined by the presence of menu prompt.
+
+        const symbol_value& v (s->curr);
+
+        // Skip printing false choice arms.
+        //
+        if (sym_is_choice_value (s) && v.tri == no)
+          goto children;
+
+        dr << "\n  " << string (lev * 2, ' ')
+           << left << setw (static_cast<int> (pad)) << lcase (s->name) << ' ';
+
+        switch (s->type)
+        {
+        case S_BOOLEAN:
+        case S_TRISTATE:
+          {
+            dr << (v.tri == yes ? "true" :
+                   v.tri == mod ? "module" : "false");
+            break;
+          }
+        case S_INT:
+        case S_HEX:
+        case S_STRING:
+          {
+            dr << static_cast<const char*> (v.val);
+            break;
+          }
+        case S_UNKNOWN:
+          assert (false);
+        }
+      }
+
+      children:
+
+      if (nest)
+        lev++;
+
+      for (menu* c (m->list); c != nullptr; c = c->next)
+        n += report (c, dr, pad, lev);
+
+      return n;
+    }
+
     bool
     init (scope& rs,
           scope&,
@@ -1242,8 +1378,11 @@ namespace build2
         }
       }
 
+      const project_name& prj (project (rs));
+
       // Set Kconfig symbols as kconfig.* variables.
       //
+      size_t count (0), pad (10);
       {
         // If this is a named project, we qualify kconfig.* variables with the
         // project and make them global. This qualification has the following
@@ -1253,7 +1392,6 @@ namespace build2
         // - Can be overridden on the command line.
         // - Can be used in subprojects.
         //
-        const project_name& prj (project (rs));
         bool var_q (!prj.empty ());
         string var_p (var_q ? prj.variable () + '.' : string ());
 
@@ -1269,14 +1407,10 @@ namespace build2
           if (calc)
             sym_calc_value (s);
 
-          // See kconfig-dump for semantics of these tests.
-          //
-          if (s->name == nullptr   ||
-              s->type == S_UNKNOWN ||
-              (s->flags & SYMBOL_CONST) != 0)
+          if (!real_symbol (s))
             continue;
 
-          assert (s->flags & SYMBOL_VALID);
+          count++;
 
           // Process the name.
           //
@@ -1336,8 +1470,6 @@ namespace build2
               // Note that in case of S_STRING it seems the string may contain
               // escapes but what we get is unescaped.
               //
-              // See kconfig-dump for details on the NULL semantics.
-              //
               // The NULL semantics is in effect when the option is disabled
               // because one of its dependencies is not satisfied (note that
               // this does not apply to bool and tristate because they are set
@@ -1348,7 +1480,7 @@ namespace build2
               if (null)
               {
                 val = nullptr;
-                break;
+                continue;
               }
 
               string sv (static_cast<const char*> (v.val));
@@ -1411,7 +1543,24 @@ namespace build2
           case S_UNKNOWN:
             assert (false);
           }
+
+          size_t n (strlen (s->name));
+          if (n > pad)
+            pad = n;
         }
+      }
+
+      // Print the report.
+      //
+      // Use the fact that we are configuring as a proxy for the new
+      // configuration.
+      //
+      if (count != 0 && verb >= (ctx.current_mif->id == configure_id ? 2 : 3))
+      {
+        diag_record dr (text);
+        dr << "kconfig " << prj << '@' << rs;
+        size_t n (report (&rootmenu, dr, pad));
+        assert (n == count);
       }
 
       // Make sure Kconfig-related files are part of the distribution. But

@@ -243,6 +243,16 @@ libhello/buildfile:2:1: info: greeting: Hi
 ...
 \
 
+The Kconfig configuration is also reported at a sufficiently high verbosity
+level (\l{b#proj-config-report Configuration Report}). For example:
+
+\
+$ b configure -v
+kconfig libhello@/tmp/libhello/
+  fancy      true
+  greeting   Hi
+\
+
 \N|The configuration values (\c{fancy} and \c{greeting}) used in this example
 are the same as what's shown in \l{b#proj-config Project Configuration} and
 the same mechanisms for post-processing and propagating configuration values
