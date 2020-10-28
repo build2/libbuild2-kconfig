@@ -6,7 +6,16 @@ if $kconfig.kconfig_hello.io
 {
   : basics
   :
-  $* 'World' >'Hello, World!'
+  if $kconfig.kconfig_hello.fancy
+    g = $kconfig.kconfig_hello.greeting_text
+    if  $kconfig.kconfig_hello.greeting_builtin
+      g += ','
+    end
+  else
+    g = 'Hello,'
+  end;
+  p = $kconfig.kconfig_hello.punct;
+  $* 'World' >"$g World$p"
 
   : missing-name
   :
