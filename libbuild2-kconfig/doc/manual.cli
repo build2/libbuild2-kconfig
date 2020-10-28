@@ -431,6 +431,43 @@ old-def <file>
 
 |
 
+Another useful application of the \c{env} method is the generation of random
+configurations with the \c{kconfig-conf} \c{--randconfig} option. For example:
+
+\
+$ b configure config.kconfig=\"env kconfig-conf -s --randconfig\"
+kconfig build/config.kconfig.new
+KCONFIG_SEED=0xD6A72753
+save build/config.build
+mv build/config.kconfig.new build/config.kconfig
+\
+
+This can be used for automatically trying various configuration, for example,
+by continuously configuring and testing the project in a loop \N{This example
+is UNIX-specific}:
+
+\
+$ while \
+  b configure config.kconfig=\"env kconfig-conf -s --randconfig\" && \
+  b test; do :; done
+\
+
+As can be seen on the previous listing, in the \c{--randconfig} mode,
+\c{kconfig-conf} prints the seed that it used to generate the configuration.
+This seed can be passed back to \c{kconfig-conf} as an environment variable in
+order to recreate the same random configuration. For example:
+
+\
+$ KCONFIG_SEED=0xD6A72753 \
+  b configure config.kconfig=\"env kconfig-conf -s --randconfig\"
+\
+
+\N|Another useful \c{--randconfig} environment variable is
+\c{KCONFIG_ALLCONFIG} which can be used to specify a configuration file
+containing a subset of options that must be set to specific rather than random
+values.|
+
+
 \h#iface-func-conf-load|Configuring and Loading|
 
 As mentioned briefly in the introduction, \c{kconfig} acts as a second-level
