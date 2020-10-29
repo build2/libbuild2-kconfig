@@ -508,7 +508,7 @@ namespace build2
 
       // Note: always transient and only entering during configure.
       //
-      config::unsave_variable (rs, var_c_k); //@@ Does not work (try new-def)!
+      config::unsave_variable (rs, var_c_k);
 
       // We have a complication: we need to load the configuration here and
       // now since anything after (remainder of root.build, buildfiles) can
@@ -939,7 +939,8 @@ namespace build2
         }
         else if (mode == "--olddefconfig")
         {
-          // @@ This call is missing in conf.c for some reason!
+          // Note that this call is missing in conf.c for some reason even
+          // though the documentation implies it should be there.
           //
           conf_set_all_new_symbols (def_default);
         }
@@ -986,10 +987,6 @@ namespace build2
         }
         else
         {
-          //@@ Before importing and running the configurator (for some modes),
-          //   we could check ourselves whether existing configuration is up
-          //   to date?
-          //
           pair<const exe*, import_kind> ir (
             import_direct<exe> (
               rs,
@@ -1000,8 +997,8 @@ namespace build2
               l,
               "module load"));
 
-          //@@ If we were to support normal import, we would have to update
-          //   the target. Maybe one day.
+          // If we were to support normal import, we would have to update the
+          // target. Maybe one day.
           //
           if (ir.second != import_kind::adhoc)
             fail (l) << "project import of kconfig-" << conf << " not supported" <<
@@ -1420,7 +1417,7 @@ namespace build2
           // Enter variable.
           //
           // @@ The kconfig module could define the tristate type if there is
-          //    use for it. Would be neat to derive it from bool somehow.
+          //    demand for it. Would be neat to derive it from bool somehow.
           //
           const value_type* var_t (nullptr);
           if (var_q)
