@@ -1,7 +1,7 @@
 [submodule "kconfig"]
 	path = kconfig
 	url = https://github.com/build2-packaging/kconfig.git
-	branch = upstream-5.9-rc1
+	branch = upstream-5.10-rc1
 [submodule "doc/style"]
 	path = doc/style
 	url = https://git.build2.org/style.git
