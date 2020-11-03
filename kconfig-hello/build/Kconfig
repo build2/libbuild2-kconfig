@@ -21,7 +21,7 @@ endmenu
 
 menuconfig FANCY
         bool "Fancy options"
-	default y
+        default y
         depends on $(ENABLE_FANCY)
         help
           Enable more fancy configuration options.
