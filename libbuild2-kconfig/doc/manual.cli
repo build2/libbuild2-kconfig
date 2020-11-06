@@ -37,7 +37,7 @@ evolved into a sophisticated
 \l{https://gsd.uwaterloo.ca/sites/default/files/vm-2013-berger.pdf variability
 modeling language} and a toolset that are used by the Linux kernel to manage
 over ten thousand configuration options. It is also increasingly being used by
-a other projects that need to manage complex configurations.
+other projects that need to manage complex configurations.
 
 The Kconfig system consists of the following main parts:
 
@@ -52,7 +52,7 @@ The Kconfig system consists of the following main parts:
 The \i{configuration definition language}, or the Kconfig language for short,
 defines a hierarchy of menus containing configuration options as well as
 relationships between them. Traditionally, configuration definitions are
-stored in files called \c{Kconfig} (with capital \c{K}). Here is a simple
+stored in files called \c{Kconfig} (with a capital \c{K}). Here is a simple
 configuration containing two options:
 
 \
@@ -342,7 +342,7 @@ be no existing \c{config.kconfig}. If the first component is omitted, then
 existing \c{config.kconfig} is reused if present (\c{old} semantics) and
 created from scratch otherwise (\c{new} semantics).
 
-Given a configuration option definition in the Kconfig file, it's value can
+Given a configuration option definition in the Kconfig file, its value can
 come from the following sources:
 
 \ol|
@@ -445,7 +445,7 @@ save build/config.build
 mv build/config.kconfig.new build/config.kconfig
 \
 
-This can be used to automatically try various configuration, for example, by
+This can be used to automatically try various configurations, for example, by
 continuously configuring and testing the project in a loop \N{This example is
 UNIX-specific}:
 
@@ -499,7 +499,7 @@ are deemed invalid. If, however, loading of the project succeeds, the
 
 The important point about this process is that the new configuration is saved
 as the last step, after successfully loading the project. And the \c{kconfig}
-module attempts to provides the second-level configuration semantics that is
+module attempts to provide the second-level configuration semantics that is
 consistent with this behavior. Specifically, while the \c{kconfig} module must
 also be loaded (bootstrapped) in \c{bootstrap.build}, it also delays loading
 \c{config.kconfig} until later. However, unlike the \c{config} module, by
@@ -546,8 +546,8 @@ In post-\c{configure} rename \c{config.kconfig.new} to \c{config.kconfig}.||
 
 When not configuring, the \c{kconfig} module simply loads \c{config.kconfig}
 and verifies it is up-to-date with definitions in \c{Kconfig}. If that's not
-the case, for example, because we've added or a removed a configuration
-option, then \c{kconfig} fails suggesting that we reconfigure the project.
+the case, for example, because we've added or removed a configuration option,
+then \c{kconfig} fails suggesting that we reconfigure the project.
 
 As mentioned in the previous section, a project may specify the default
 configuration method that will be used if not explicitly specified with
@@ -694,7 +694,7 @@ config FANCY
 With this change we can now enable/disable the fancy options by adjusting the
 \c{ENABLE_FANCY} Kconfig macro variable. The next step is to somehow set it
 from outside the \c{Kconfig} file. With the \c{kconfig} module we can do that
-by simply setting the corresponding \c{Kconfig.*} variable (with capital
+by simply setting the corresponding \c{Kconfig.*} variable (with a capital
 \c{K}) in our \c{buildfile}. \N{If invoking one of the configurators directly,
 then such variables are set via the environment}. In our example, let's remove
 the \c{ENABLE_FANCY} assignment from \c{Kconfig} and rewrite \c{root.build} as
@@ -719,10 +719,10 @@ wise to limit the use of external variables to disabling options and menus
 rather than altering their definitions.
 
 A macro substitution referencing a variable that is not set inside the
-\c{Kconfig} file nor via the \c{Kconfig.*} Buildfile variable is considered an
-error. The only builtin variable set automatically by the \c{kconfig} module
-is \c{SRC_ROOT} which contains the project's source root directory (the same
-as the \c{src_root} Buildfile variable). It is normally used to source
+\c{Kconfig} file nor via the \c{Kconfig.*} Buildfile variable is an error. The
+only builtin variable set automatically by the \c{kconfig} module is
+\c{SRC_ROOT} which contains the project's source root directory (the same as
+the \c{src_root} Buildfile variable). It is normally used to source
 (\l{#lang-source Source}) additional \c{Kconfig} files, for example:
 
 \
@@ -733,7 +733,7 @@ source \"$(SRC_ROOT)/libhello/Kconfig\"
 
 Kconfig is a line-oriented language. That is, a construct ends at the end of
 the line unless escaped with line continuation (trailing \c{\\}). The \c{#}
-character starts a comment with everything from this character and until the
+character starts a comment with everything from this character until the
 end of the line ignored. This character and other special characters (quotes,
 \c{$}, etc) can be escaped with a backslash.
 
@@ -871,7 +871,7 @@ and Best Practices} from the Zephyr project.
 
 The central part of Kconfig is the \i{configuration option} definition with
 the rest of the language is mostly serving to organize options into
-sub-menus. A simple \c{Kconfig} file may consists of just option definitions
+sub-menus. A simple \c{Kconfig} file may consist of just option definitions
 which all become entries of the implicitly-defined main menu (discussed in the
 next section).
 
@@ -890,9 +890,9 @@ config IO
 \N|Other Kconfig documentation often uses the term symbol to mean the
 configuration option, not just its name.|
 
-The name is traditionally spelled in the upper case and is the same name as
-what will end up in the configuration file but prefixed with \c{CONFIG_} and
-as a Buildfile variable but converted into the lower case and prefixed with
+The name is traditionally spelled in upper case and is the same name that will
+end up in the configuration file but prefixed with \c{CONFIG_} and as a
+Buildfile variable but converted into lower case and prefixed with
 \c{kconfig.<project>.}.
 
 Following the \c{config} keyword and the name we have a number of lines that
@@ -932,8 +932,9 @@ on which \c{GREETING_H*} option is selected.
 \i{string} \ = \b{\"}\i{text}\b{\"} | \b{\'}\i{text}\b{\'}\n
 \i{prompt} \ = \i{string}}
 
-Configuration option prompt is a short text that describes the option to the
-user while the option help provides a more detailed description. For example:
+The configuration option prompt is a short text that describes the option to
+the user while the option help provides a more detailed description. For
+example:
 
 \
 config IO
@@ -1100,10 +1101,11 @@ config PUNCT
 \
 
 This value will be used as the suggested answer in interactive configurations
-methods and as a fallback in non-interactive (see \l{#iface-func-conf-method
-Configuration Methods} for details). If no default value is specified, \c{n}
-is assumed for \c{bool} and \c{tristate} and empty string for \c{string} while
-there is no assumed default for \c{int} and \c{hex}.
+methods and as a fallback in non-interactive ones (see
+\l{#iface-func-conf-method Configuration Methods} for details). If no default
+value is specified, \c{n} is assumed for \c{bool} and \c{tristate} and empty
+string for \c{string} while there is no assumed default for \c{int} and
+\c{hex}.
 
 \N|While \c{int} and \c{hex} options without default values are valid,
 creating a configuration in a way that would require default values (for
@@ -1148,7 +1150,7 @@ config NAME_ASK
 If an option's dependency is not satisfied, then the option becomes
 \i{disabled}: the user is not prompted for its value and its default value is
 not used. For \c{bool} and \c{tristate}, the disabled option is set to \c{n}.
-For other types, disabled option's value is not set and the corresponding
+For other types, the disabled option's value is not set and the corresponding
 \c{kconfig.*} variable is \c{null}.
 
 \N|We use the term \i{enabled}/\i{disabled} when we refer to the option's
@@ -1171,8 +1173,8 @@ config NAME_ASK
 \
 
 Specifying multiple \c{depends\ on} attributes is equivalent to specifying
-their expressions with a single \c{depends\ on} connected with \c{&&}. For
-example, this variant is equivalent to the above:
+their expressions with a single \c{depends\ on} attribute combined with
+\c{&&}. For example, this variant is equivalent to the above:
 
 \
 config NAME_ASK
@@ -1233,7 +1235,7 @@ A strong reverse dependency is specified with the \c{select} attribute. It
 forces the option specified after the \c{select} keyword to \c{y} whenever the
 option containing this attribute is set to \c{y} (for \c{tristate} options,
 the same logic applies for \c{m}). And by \i{forces} we mean just that: it
-disregard unsatisfied dependencies and user selection.
+disregards unsatisfied dependencies and user selection.
 
 Note that this forceful nature of strong reverse dependencies often leads to
 puzzling configuration issues. For example, a user may be trying to
@@ -1406,8 +1408,8 @@ endmenu
 \
 
 Menu visibility is the extension of the option prompt visibility in that an
-option that belong to an invisible menu has the same semantics as if it had an
-invisible prompt (\l{#lang-option-prompt-help Prompt and Help}).
+option that belongs to an invisible menu has the same semantics as if it had
+an invisible prompt (\l{#lang-option-prompt-help Prompt and Help}).
 
 Another attribute of a menu definition is \c{depends\ on}. Specifying this
 attribute is equivalent to specifying it for every option that belongs to this
@@ -1659,7 +1661,8 @@ comment \"IO disabled, no output will be shown\"
 
 Similar to other entries, a comment may specify a number of attributes on the
 following lines. Currently the only valid comment attribute is \c{depends\ on}
-which can be used to make a comment conditional, a shown in the example above.
+which can be used to make a comment conditional, as shown in the example
+above.
 
 
 \h#lang-source|Source (\c{source})|
@@ -1746,7 +1749,7 @@ root \c{buildfile} you could have:
 
 The Kconfig language provides support for \c{make}-like macro substitution.
 Conceptually, there are two languages layered one on top of the other: the
-bottom layer is the macro language that perform plain textual substitutions.
+bottom layer is the macro language that performs plain textual substitutions.
 The result is then used as input to the top layer, which is the Kconfig
 definition language. For example:
 
@@ -1790,7 +1793,7 @@ Kconfig Macro Language} documentation for details.|
 
 Macro variables can only be assigned at the beginning of a \c{Kconfig} file
 before any Kconfig definitions (options, menus, etc). Similar to \c{make},
-there is no need to quote values in macro variable assignment unless we want
+there is no need to quote values in a macro variable assignment unless we want
 the value to contain literal quotes. For example, this version is equivalent
 to the above:
 
@@ -1854,8 +1857,8 @@ config GREETING
         default $(DEFAULT_GREETING) if !IO
 \
 
-In this example, both \c{DEFAULT_GREETING} \c{DEFAULT_GREETING_IO} must always
-be defined regardless of which default value is (later) used.
+In this example, both \c{DEFAULT_GREETING} and \c{DEFAULT_GREETING_IO} must
+always be defined regardless of which default value is (later) used.
 
 Similar to \c{make}, Kconfig supports both simple and recursively-expanding
 variables with the latter used as a building block to support functions. For
