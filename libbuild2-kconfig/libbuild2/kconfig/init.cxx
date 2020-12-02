@@ -1454,8 +1454,8 @@ namespace build2
             }
           case S_TRISTATE:
             {
-              val = names {name (v.tri == yes ? "true" :
-                                 v.tri == mod ? "module" : "false")};
+              val = (v.tri == yes ? "true" :
+                     v.tri == mod ? "module" : "false");
               break;
             }
           case S_INT:
