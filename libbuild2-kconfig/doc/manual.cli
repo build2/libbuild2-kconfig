@@ -227,7 +227,7 @@ $ b configure config.kconfig=qconf
 \
 
 The \c{CONFIG_*} values from the configuration file are made available as
-\c{config.<project>.*} variables in \c{buildfiles} with the configuration
+\c{kconfig.<project>.*} variables in \c{buildfiles} with the configuration
 option name converted to the lower case. For example, we can examine our
 values by adding the following \c{info} directives at the beginning of
 \c{libhello/buildfile}:
@@ -282,7 +282,7 @@ h{config}: in{config}
 See \l{https://cppget.org/kconfig-hello \c{kconfig-hello}} for a complete
 example that uses these mechanisms.|
 
-Analogous to \c{configure}, the standard \c{disfigure} meta-operation remove
+Analogous to \c{configure}, the standard \c{disfigure} meta-operation removes
 the Kconfig configuration, or, more precisely, moves it to
 \c{config.kconfig.old}. For example:
 
@@ -669,7 +669,7 @@ using cxx
 
 using kconfig
 
-if ($cxx.target.class != 'windows' && kconfig.libhello.fancy)
+if ($kconfig.libhello.fancy && $cxx.target.class == 'windows')
   fail \"have to keep it basic on Windows\"
 \
 
@@ -1164,6 +1164,9 @@ expression involving more than one option or non-boolean options (see
 \l{#lang-option-expr Expressions} for details). For example:
 
 \
+config IO
+        bool \"IO support\"
+
 config RETRY
         int \"Max times to retry\"
 
@@ -1333,6 +1336,9 @@ OR. For example:
 \
 FALLBACK_NAME := ...
 
+config IO
+        bool \"IO support\"
+
 config RETRY
         int \"Max times to retry\"
 
@@ -1447,7 +1453,6 @@ config GREETING
 
 config NAME_ASK
         bool \"Ask for name\"
-        depends on IO
         help
           Ask for the name to greet if it is unspecified on the
           command line.
@@ -1473,7 +1478,6 @@ config GREETING
 
 config NAME_ASK
         bool \"Ask for name\"
-        depends on IO
         ...
 
 endif
@@ -1615,7 +1619,6 @@ choice NAME_FALLBACK
 
 config NAME_ASK
         bool \"Ask for name\"
-        depends on IO
         help
           Ask for the name to greet if it is unspecified on the
           command line.
@@ -1629,16 +1632,16 @@ config NAME_DEF
 endchoice
 \
 
-At the Buildfile level we can then use \c{config.<project>.name_fallback} to
+At the Buildfile level we can then use \c{kconfig.<project>.name_fallback} to
 determine if any of the choice options were selected, for example:
 
 \
-if $config.hello.name_fallback
+if $kconfig.hello.name_fallback
 {
-  if $config.hello.name_ask
+  if $kconfig.hello.name_ask
     ...
 
-  if $config.hello.name_def
+  if $kconfig.hello.name_def
     ...
 }
 \
