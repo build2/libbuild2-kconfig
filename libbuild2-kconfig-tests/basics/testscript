@@ -36,11 +36,13 @@ test.options += --no-default-options --serial-stop --silent --buildfile -
     default y
   EOI
 
++export BDEP_SYNC=0
+
 : transient
 :
 mkdir build;
 ln -s ../../bootstrap.build ../../root.build ../../Kconfig build/;
-env BDEP_SYNC=0 -- $* noop <<EOI >>EOO
+$* noop <<EOI >>EOO
   print $kconfig.basics.foo
   print $kconfig.basics.bar
   print $kconfig.basics.baz
@@ -79,7 +81,7 @@ cat <<EOI >=defconfig.kconfig;
   # CONFIG_FOO is not set
   CONFIG_BAR=y
   EOI
-env BDEP_SYNC=0 -- $* configure config.kconfig="old-def defconfig.kconfig" <'./:' &build/config.build &build/config.kconfig.old;
+$* configure config.kconfig="old-def defconfig.kconfig" <'./:' &build/config.build &build/config.kconfig.old;
 cat build/config.kconfig >>EOO
   #
   # Automatically generated file; DO NOT EDIT.
@@ -98,7 +100,7 @@ ln -s ../Kconfig ./;
 cat <<EOI >=build/Kconfig;
   source "$(SRC_ROOT)/Kconfig"
   EOI
-env BDEP_SYNC=0 -- $* noop <<EOI >>EOO
+$* noop <<EOI >>EOO
   print $kconfig.basics.foo
   print $kconfig.basics.bar
   print $kconfig.basics.baz
@@ -117,7 +119,7 @@ ln -s ../../bootstrap.build ../../root.build build/;
 cat <<EOI >=build/Kconfig;
   source "$(SRC_ROOT)/Kconfig"
   EOI
-env BDEP_SYNC=0 -- $* noop <'' 2>>~%EOE% != 0
+$* noop <'' 2>>~%EOE% != 0
   %.+/source-error/build/Kconfig:1: can't open file ".+/source-error/Kconfig"%
   EOE
 
@@ -128,7 +130,7 @@ ln -s ../../bootstrap.build ../../root.build build/;
 cat <<EOI >=build/Kconfig;
   source abc
   EOI
-env BDEP_SYNC=0 -- $* noop <'' 2>>~%EOE% != 0
+$* noop <'' 2>>~%EOE% != 0
   %.+/Kconfig:2: syntax error%
   %.+/Kconfig:1: invalid statement%
   EOE
@@ -140,6 +142,6 @@ ln -s ../../bootstrap.build ../../root.build ../../Kconfig build/;
 cat <<EOI >=build/config.kconfig;
   JUNK
   EOI
-env BDEP_SYNC=0 -- $* configure config.kconfig=def <'./:' 2>>~%EOE% &build/config.build &build/config.kconfig.old
+$* configure config.kconfig=def <'./:' 2>>~%EOE% &build/config.build &build/config.kconfig.old
   %.+/build/config.kconfig.new:1: warning: unexpected data: JUNK%
   EOE
