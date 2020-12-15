@@ -7,7 +7,7 @@ test.options += --no-default-options --serial-stop --silent --buildfile -
 # up-to-date by pre-loading it in the tests project (see bootstrap.build for
 # details).
 #
-# @@ Would be nice to set BDEP_SYNC=0 once for the entire scope.
++export BDEP_SYNC=0
 
 +cat <<EOI >=bootstrap.build
   project = basics
@@ -35,8 +35,6 @@ test.options += --no-default-options --serial-stop --silent --buildfile -
     depends on BAR
     default y
   EOI
-
-+export BDEP_SYNC=0
 
 : transient
 :
