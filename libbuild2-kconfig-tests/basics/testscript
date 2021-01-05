@@ -118,7 +118,7 @@ cat <<EOI >=build/Kconfig;
   source "$(SRC_ROOT)/Kconfig"
   EOI
 $* noop <'' 2>>~%EOE% != 0
-  %.+/source-error/build/Kconfig:1: can't open file ".+/source-error/Kconfig"%
+  %.+/source-error/build/Kconfig:1: error: unable to open file ".+/source-error/Kconfig"%
   EOE
 
 : syntax-error
@@ -129,8 +129,8 @@ cat <<EOI >=build/Kconfig;
   source abc
   EOI
 $* noop <'' 2>>~%EOE% != 0
-  %.+/Kconfig:2: syntax error%
-  %.+/Kconfig:1: invalid statement%
+  %.+/Kconfig:2: error: syntax error%
+  %.+/Kconfig:1: error: invalid statement%
   EOE
 
 : value-warning
