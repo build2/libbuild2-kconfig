@@ -1560,6 +1560,11 @@ namespace build2
         assert (n == count);
       }
 
+      // Environment (see *_load() below for details).
+      //
+      config::save_environment (
+        rs, {"KCONFIG_PROBABILITY", "KCONFIG_SEED", "KCONFIG_ALLCONFIG"});
+
       // Make sure Kconfig-related files are part of the distribution. But
       // let's not waste time if we are not distributing.
       //
@@ -1609,7 +1614,8 @@ namespace build2
     build2_kconfig_load ()
     {
       // Unset Kconfig environment variables that may interfere with our
-      // business. These we allow through:
+      // business. These we allow through (and some save in hermetic
+      // configurations):
       //
       // KCONFIG_PROBABILITY
       // ZCONF_DEBUG
