@@ -1630,8 +1630,11 @@ namespace build2
       // KCONFIG_NOSILENTUPDATE  (conf --syncconfig)
       // KCONFIG_CONFIG          (always reset)
       // KCONFIG_MAINMENU        (always reset)
+      //
       try
       {
+        using butl::unsetenv;
+
         unsetenv (SRCTREE);
         unsetenv ("CONFIG_");
         unsetenv ("KCONFIG_AUTOCONFIG");
