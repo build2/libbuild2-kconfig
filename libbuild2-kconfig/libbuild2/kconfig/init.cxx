@@ -975,6 +975,43 @@ namespace build2
         //
         strings evars (env_init (rs, vf, var_K, var_k_k_t));
 
+        // Unset Kconfig environment variables that may interfere with our
+        // business (we only do that if they are present to keep diagnostics
+        // tidy).
+        //
+        // These we allow through (and some save in hermetic configurations):
+        //
+        // KCONFIG_PROBABILITY
+        // ZCONF_DEBUG
+        // KCONFIG_SEED          (conf --randconfig)
+        // KCONFIG_ALLCONFIG     (conf --randconfig)
+        // NCONFIG_MODE          (nconf)
+        // MENUCONFIG_MODE       (mconf)
+        // MENUCONFIG_COLOR      (mconf)
+        //
+        // These don't affect us:
+        //
+        // KCONFIG_NOSILENTUPDATE  (conf --syncconfig)
+        // KCONFIG_CONFIG          (always reset)
+        // KCONFIG_MAINMENU        (always reset)
+        //
+        // Note that for the built-in modes we cut off the outside environment
+        // entirely via the getenv() callback (and those few calls in conf.c
+        // that don't got through the callback do not happen in the build-in
+        // modes).
+        //
+        auto unsetenv = [&evars] (const char* n)
+        {
+          if (getenv (n))
+            evars.push_back (n);
+        };
+
+        unsetenv (SRCTREE);
+        unsetenv ("CONFIG_");
+        unsetenv ("KCONFIG_AUTOCONFIG");
+        // unsetenv ("KCONFIG_AUTOHEADER"); // Disabled by KCONFIG_AUTOCONFIG.
+        unsetenv ("KCONFIG_OVERWRITECONFIG");
+
         // Resolve the configurator program.
         //
         process_path pp;
@@ -1560,7 +1597,7 @@ namespace build2
         assert (n == count);
       }
 
-      // Environment (see *_load() below for details).
+      // Environment (see configure() for details).
       //
       config::save_environment (
         rs, {"KCONFIG_PROBABILITY", "KCONFIG_SEED", "KCONFIG_ALLCONFIG"});
@@ -1613,40 +1650,6 @@ namespace build2
     const module_functions*
     build2_kconfig_load ()
     {
-      // Unset Kconfig environment variables that may interfere with our
-      // business. These we allow through (and some save in hermetic
-      // configurations):
-      //
-      // KCONFIG_PROBABILITY
-      // ZCONF_DEBUG
-      // KCONFIG_SEED          (conf --randconfig)
-      // KCONFIG_ALLCONFIG     (conf --randconfig)
-      // NCONFIG_MODE          (nconf)
-      // MENUCONFIG_MODE       (mconf)
-      // MENUCONFIG_COLOR      (mconf)
-      //
-      // These don't seem to affect us:
-      //
-      // KCONFIG_NOSILENTUPDATE  (conf --syncconfig)
-      // KCONFIG_CONFIG          (always reset)
-      // KCONFIG_MAINMENU        (always reset)
-      //
-      try
-      {
-        using butl::unsetenv;
-
-        unsetenv (SRCTREE);
-        unsetenv ("CONFIG_");
-        unsetenv ("KCONFIG_AUTOCONFIG");
-        // unsetenv ("KCONFIG_AUTOHEADER"); // Disabled by KCONFIG_AUTOCONFIG.
-        unsetenv ("KCONFIG_OVERWRITECONFIG");
-      }
-      catch (const system_error& e)
-      {
-        error << "unable to clear Kconfig environment: " << e;
-        return nullptr;
-      }
-
       return mod_functions;
     }
   }
