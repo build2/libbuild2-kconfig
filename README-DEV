@@ -1,0 +1,5 @@
+Note that we do not automatically generate the lexer (lexer.lex.c) and parser
+(parser.tab.{h,c}) in libbuild2-kconfig/libbuild2/kconfig/ in order not to
+have a build-time dependency on lex and yacc. Instead, these files are copied
+from liblkc. Normally this needs to be done as part of each upstream (kconfig)
+module update.

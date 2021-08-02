@@ -1,5 +1,0 @@
-# Generated lexer and parser.
-#
-lexer.lex.c
-parser.tab.h
-parser.tab.c

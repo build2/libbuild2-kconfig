@@ -3,9 +3,9 @@ impl_libs = # Implementation dependencies.
 
 import impl_libs += build2%lib{build2} # Implied interface dependency.
 
-import? flex  = flex%exe{flex}
-import? bison = bison%exe{bison}
-
+# Include the lexer and parser source files for reference (see README-DEV for
+# details).
+#
 define y: file
 y{*}: extension = y
 
@@ -16,46 +16,10 @@ getopt = ($c.target.class == 'windows' && $c.target.system != 'mingw32')
 
 lib{build2-kconfig}: {hxx ixx txx cxx}{**} $impl_libs $intf_libs
 
-lib{build2-kconfig}: {h c}{* -parser.tab... -lexer.lex... -menu -conf} \
-                     {h c}{parser.tab...} c{lexer.lex...}
+lib{build2-kconfig}: {h c}{* -menu -conf} y{parser} l{lexer}
 lib{build2-kconfig}: c{menu}: include = adhoc # Included by parser.y.
 lib{build2-kconfig}: c{conf}: include = adhoc # Included by confapi.c.
 lib{build2-kconfig}: getopt/h{getopt}: include = $getopt
-
-if ($flex != [null] && $bison != [null])
-{
-  # Note: the kernel's makefile (Makefile.host) always passes -t (instrument
-  # the parser for tracing) and -l/-L (don't generate #line directives). It's
-  # not clear whether/why we would want the same. To start let's keep them
-  # (we've confirmed -t doesn't seem to have any effect on performance).
-  #
-  #
-  <{h c}{parser.tab...}>: y{parser} $bison
-  {{
-    diag bison ($<[0])
-    $bison "--defines=$path($>[0])" "--output=$path($>[1])" -t -l $path($<[0])
-  }}
-
-  c{lexer.lex...}: l{lexer} h{parser.tab...} $flex
-  {{
-    diag flex ($<[0])
-    $flex -o $path($>) -L -f $path($<[0])
-  }}
-
-  {h c}{parser.tab...} c{lexer.lex...}:
-  {
-    # Include the generated files into the distribution and don't remove them
-    # when cleaning in src (so that clean results in a state identical to
-    # distributed).
-    #
-    dist  = true
-    clean = ($src_root != $out_root)
-
-    # Backlink in the source directory for convenience of development.
-    #
-    backlink = true
-  }
-}
 
 # Build options.
 #
@@ -81,6 +45,8 @@ switch $c.class
 
     if ($c.target.class == 'windows')
       c.coptions += -Wno-deprecated-declarations
+
+    obj{lexer.lex...}: c.coptions += -Wno-unused-function -Wno-unused-label
   }
 
   case 'msvc'
