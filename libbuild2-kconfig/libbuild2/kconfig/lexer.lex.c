@@ -10,7 +10,7 @@
 #define YY_FLEX_MAJOR_VERSION 2
 #define YY_FLEX_MINOR_VERSION 5
 #define YY_FLEX_LOWER_VERSION 4
-#define YY_FLEX_PATCH_VERSION 20210510
+#define YY_FLEX_PATCH_VERSION 20210808
 
 #include <stdio.h>
 
@@ -1697,8 +1697,8 @@ yyunput(int c, char *yy_bp)
     }
 
     *--yy_cp = (char) c;
-if (c == '\n')
-    --yylineno;
+    if (c == '\n')
+	--yylineno;
 
     yytext_ptr = yy_bp;
     yy_hold_char = *yy_cp;

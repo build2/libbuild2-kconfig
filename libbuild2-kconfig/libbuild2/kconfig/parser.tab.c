@@ -5,7 +5,7 @@
 #define YYBYACC 1
 #define YYMAJOR 2
 #define YYMINOR 0
-#define YYPATCH 20210619
+#define YYPATCH 20210808
 
 #define YYEMPTY        (-1)
 #define yyclearin      (yychar = YYEMPTY)
@@ -1152,7 +1152,7 @@ YYPARSE_DECL()
     yynerrs = 0;
     yyerrflag = 0;
     yychar = YYEMPTY;
-    /* yystate is set below */
+    yystate = 0;
 
 #if YYPURE
     memset(&yystack, 0, sizeof(yystack));
