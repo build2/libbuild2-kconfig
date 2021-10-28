@@ -16,8 +16,7 @@ getopt = ($c.target.class == 'windows' && $c.target.system != 'mingw32')
 
 lib{build2-kconfig}: {hxx ixx txx cxx}{**} $impl_libs $intf_libs
 
-lib{build2-kconfig}: {h c}{* -menu -conf} y{parser} l{lexer}
-lib{build2-kconfig}: c{menu}: include = adhoc # Included by parser.y.
+lib{build2-kconfig}: {h c}{* -conf} y{parser} l{lexer}
 lib{build2-kconfig}: c{conf}: include = adhoc # Included by confapi.c.
 lib{build2-kconfig}: getopt/h{getopt}: include = $getopt
 

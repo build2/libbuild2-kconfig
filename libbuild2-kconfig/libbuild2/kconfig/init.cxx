@@ -813,7 +813,7 @@ namespace build2
             // --defconfig does it) and then manually move the values to
             // S_DEF_DEF3.
             //
-            sym_set_change_count (0);
+            conf_set_changed (false);
 
             assert (args[3] == arg_cf.c_str ());
             if (conf_read_simple (args[3], S_DEF_USER) != 0)
@@ -837,9 +837,9 @@ namespace build2
               // Next load the current configuration file.
               //
               // Note that we don't want any changes in the default file to
-              // count so we reset the counter.
+              // count so we reset the flag.
               //
-              sym_set_change_count (0);
+              conf_set_changed (false);
 
               if (conf_read_simple (arg_vf.c_str (), S_DEF_USER) != 0)
                 fail (l) << "unable to load " << vf;
@@ -1011,6 +1011,7 @@ namespace build2
         unsetenv ("KCONFIG_AUTOCONFIG");
         // unsetenv ("KCONFIG_AUTOHEADER"); // Disabled by KCONFIG_AUTOCONFIG.
         unsetenv ("KCONFIG_OVERWRITECONFIG");
+        unsetenv ("KCONFIG_DEFCONFIG_LIST");
 
         // Resolve the configurator program.
         //

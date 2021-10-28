@@ -1989,14 +1989,14 @@ is equivalent to \c{y} only if modules are enabled. For example:
 \
 config MODULES
        bool \"Modules support\"
-       option modules
+       modules
 
 config IO
        tristate \"IO support\"
 \
 
 In the above example, \c{MODULES} is designated as the modules option with the
-\c{option} attribute. If we answer \c{y} to \c{MODULES}, then for \c{IO} we
+\c{modules} attribute. If we answer \c{y} to \c{MODULES}, then for \c{IO} we
 will be able to choose between \c{y}, \c{m}, and \c{n}. However, if
 \c{MODULES} is \c{n}, then our choice for \c{IO} will be between \c{y} and
 \c{n}:
@@ -2018,7 +2018,7 @@ the \c{MODULES} option prompt-less with \c{y} default, for example:
 config MODULES
        bool
        default y
-       option modules
+       modules
 \
 
 \N|Only one configuration option can be designated as the module option. This
