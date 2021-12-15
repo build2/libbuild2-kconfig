@@ -1025,7 +1025,7 @@ namespace build2
         }
         else
         {
-          pair<const exe*, import_kind> ir (
+          import_result<exe> ir (
             import_direct<exe> (
               rs,
               name ("kconfig-" + conf, dir_path (), "exe", "kconfig-" + conf),
@@ -1038,11 +1038,11 @@ namespace build2
           // If we were to support normal import, we would have to update the
           // target. Maybe one day.
           //
-          if (ir.second != import_kind::adhoc)
+          if (ir.kind != import_kind::adhoc)
             fail (l) << "project import of kconfig-" << conf << " not supported" <<
               info << "use config.kconfig_" << conf << " to specify executable path";
 
-          const process_path& pp (ir.first->process_path ());
+          const process_path& pp (ir.target->process_path ());
           args[0] = pp.recall_string ();
 
           env = process_env (pp, evars);
