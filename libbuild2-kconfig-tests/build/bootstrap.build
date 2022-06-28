@@ -9,4 +9,5 @@ using dist
 # up-to-date before we start running the tests. Failed that, we may try to
 # update it from multiple tests in parallel.
 #
-using kconfig
+if ($build.mode != 'skeleton')
+  using kconfig

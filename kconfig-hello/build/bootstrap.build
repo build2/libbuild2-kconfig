@@ -2,7 +2,13 @@ project = kconfig-hello
 
 using version
 using config
-using kconfig
+
+# Note that you don't need to (but may still want to) do this in your
+# applications since kconfig is a standard pre-installed module.
+#
+if ($build.mode != 'skeleton')
+  using kconfig
+
 using test
 using install
 using dist
