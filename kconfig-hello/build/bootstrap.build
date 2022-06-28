@@ -2,7 +2,10 @@ project = kconfig-hello
 
 using version
 using config
-using kconfig
+
+if ($build.mode != 'skeleton')
+  using kconfig
+
 using test
 using install
 using dist

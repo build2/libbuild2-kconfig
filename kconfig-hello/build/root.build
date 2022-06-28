@@ -11,7 +11,8 @@ kconfig.kconfig.transient = def
 
 Kconfig.ENABLE_FANCY = $config.kconfig_hello.fancy
 
-using kconfig
+if ($build.mode != 'skeleton')
+  using kconfig
 
 using in
 
