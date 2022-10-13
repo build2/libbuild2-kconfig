@@ -1,6 +1,6 @@
 : 1
 name: kconfig-hello
-version: 0.2.0
+version: 0.3.0-a.0.z
 project: build2
 summary: The Kconfig version of "Hello World" example program
 license: GPL-2.0-only
