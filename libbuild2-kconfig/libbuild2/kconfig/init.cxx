@@ -239,6 +239,8 @@ namespace build2
         {
           // Lookup and, if it's expensive to convert, cache.
           //
+          // Note: go straight for the public variable pool.
+          //
           auto& vp (rs.ctx.var_pool);
 
           if (const variable* var = vp.find (string ("Kconfig.") + name))
@@ -299,12 +301,12 @@ namespace build2
     // Note: KCONFIG_CONFIG is expected to be first.
     //
     static strings
-    env_init (const scope& rs,
-              const path& vf,
-              const variable& var_K,
-              const variable& var_k_k_t)
+    env_init (const scope& rs, const path& vf, const variable& var_k_k_t)
     {
       context& ctx (rs.ctx);
+
+      // Note: go straight for the public variable pool.
+      //
       auto& vp (ctx.var_pool);
 
       strings evars;
@@ -326,7 +328,7 @@ namespace build2
 
       // Add Kconfig.* variables if any.
       //
-      for (auto p (rs.vars.lookup_namespace (var_K));
+      for (auto p (rs.vars.lookup_namespace ("Kconfig"));
            p.first != p.second;
            ++p.first)
       {
@@ -365,7 +367,10 @@ namespace build2
     {
       context& ctx (rs.ctx);
 
-      auto& vp (rs.var_pool ());
+      // All the variables we enter are qualified so go straight for the
+      // public variable pool.
+      //
+      auto& vp (rs.var_pool (true /* public */));
 
       // The config.kconfig variable controls the configuration method. Its
       // value has the following structure:
@@ -501,10 +506,6 @@ namespace build2
       auto& var_k_k_c (vp.insert<strings> ("kconfig.kconfig.configure"));
       auto& var_k_k_r (vp.insert<strings> ("kconfig.kconfig.reconfigure"));
       auto& var_k_k_y (vp.insert<strings> ("kconfig.kconfig.retryconfigure"));
-
-      // Kconfig.* variable prefix.
-      //
-      auto& var_K (vp.insert ("Kconfig"));
 
       // Note: always transient and only entering during configure.
       //
@@ -973,7 +974,7 @@ namespace build2
       {
         // Prepare the environment.
         //
-        strings evars (env_init (rs, vf, var_K, var_k_k_t));
+        strings evars (env_init (rs, vf, var_k_k_t));
 
         // Unset Kconfig environment variables that may interfere with our
         // business (we only do that if they are present to keep diagnostics
@@ -1301,7 +1302,11 @@ namespace build2
       }
 
       context& ctx (rs.ctx);
-      auto& vp (rs.var_pool ());
+
+      // All the variables we enter are qualified so go straight for the
+      // public variable pool.
+      //
+      auto& vp (rs.var_pool (true /* public */));
 
       const dir_path& src_root (rs.src_path ());
       const dir_path& out_root (rs.out_path ());
