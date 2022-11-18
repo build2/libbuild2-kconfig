@@ -752,7 +752,7 @@ namespace build2
           dr << "KCONFIG_CONFIG=" << arg_vf << ' '; print_process (dr, args);
         }
         else if (verb)
-          text << "kconfig " << vf;
+          print_diag ("kconfig", vf);
 
         // Similar code to init() below.
         //
@@ -1057,9 +1057,9 @@ namespace build2
           dr << evars[0] << ' '; print_process (dr, args);
         }
         else if (verb)
-          text << "kconfig " << vf;
+          print_diag ("kconfig", vf);
 
-        run (env, args);
+        run (ctx, env, args, 1 /* finish_verbosity */);
       }
 
       return vf;
