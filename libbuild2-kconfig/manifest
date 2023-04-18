@@ -12,5 +12,5 @@ builds: all
 requires: bootstrap
 depends: * build2 >= 0.16.0-
 depends: * bpkg >= 0.16.0-
+tests: * kconfig-hello == $
 tests: * libbuild2-kconfig-tests == $
-examples: * kconfig-hello == $
