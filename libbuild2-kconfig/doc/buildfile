@@ -23,7 +23,7 @@ if ($cli != [null])
 {
   ./: xhtml{build2-kconfig-manual}
 
-  xhtml{build2-kconfig-manual}: cli{manual} ../file{COPYRIGHT}          \
+  xhtml{build2-kconfig-manual}: cli{manual} ../legal{COPYRIGHT}         \
                                 xhtml{doc-prologue doc-epilogue} css{*} \
                                 $cli
   {
