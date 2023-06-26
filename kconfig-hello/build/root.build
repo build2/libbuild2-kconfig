@@ -28,6 +28,9 @@ ixx{*}: extension = ixx
 txx{*}: extension = txx
 cxx{*}: extension = cxx
 
+if ($cxx.id.type == 'clang' && $cxx.version.major >= 15)
+  cxx.coptions += -Wno-unqualified-std-cast-call
+
 # The test target for cross-testing (running tests under Wine, etc).
 #
 test.target = $cxx.target
