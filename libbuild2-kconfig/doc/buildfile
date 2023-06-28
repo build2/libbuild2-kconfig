@@ -32,8 +32,6 @@ if ($cli != [null])
     backlink = true
   }
   {{
-    diag cli $> : ($<[0]) # @@ TMP: revise
-
     # Note that the date change doesn't change the script semantics, thus the
     # variable is defined locally.
     #
