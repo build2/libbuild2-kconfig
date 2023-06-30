@@ -1,6 +1,6 @@
 : 1
 name: libbuild2-kconfig
-version: 0.3.0-a.0.z
+version: 0.3.0
 project: build2
 summary: Kconfig build system module for build2
 license: GPL-2.0-only
