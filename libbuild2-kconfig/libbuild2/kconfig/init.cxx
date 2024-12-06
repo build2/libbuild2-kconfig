@@ -1455,7 +1455,7 @@ namespace build2
           // Process the name.
           //
           string var_n ("kconfig." + var_p + s->name);
-          lcase (var_n, var_p.size () + 8);
+          make_lcase (var_n, var_p.size () + 8);
 
           // Enter variable.
           //
